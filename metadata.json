@@ -1,0 +1,6 @@
+{
+  "name": "PumpSniper - Pump.fun Telegram Sniping & Alert Bot",
+  "description": "Production-ready Telegram sniping, alert, and 5x/10x price tracking bot engine for Pump.fun on Solana with low-latency event listener, bonding curve math, and interactive control terminal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
