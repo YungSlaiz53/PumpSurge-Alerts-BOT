@@ -86,30 +86,26 @@ export interface TrackedToken {
   buyCount: number;
   sellCount: number;
   volumeSol: number;
-  channelMessageId?: number; // Telegram message ID of original alert for replies
   lastTradeTimestamp: number;
 }
 
 /**
- * User notification settings for interactive Telegram DM
+ * User notification & app preferences stored in live database
  */
 export interface UserPreferences {
-  userId: number;
-  username?: string;
-  firstName?: string;
-  notifyAllListings: boolean;
-  notifySurgesOnly: boolean;
   minLiquidityFilterSol: number;
-  joinedAt: number;
+  notify5x: boolean;
+  notify10x: boolean;
+  soundEnabled: boolean;
+  browserNotifications: boolean;
 }
 
 /**
- * Bot Environment Configuration interface
+ * Application & Solana Node Configuration
  */
-export interface BotConfig {
-  telegramBotToken: string;
-  telegramChannelId: string;
-  telegramAdminUserId?: string;
+export interface AppConfig {
+  port: number;
+  nodeEnv: string;
   solanaRpcUrl: string;
   solanaWssUrl: string;
   solanaCommitment: 'processed' | 'confirmed' | 'finalized';
@@ -118,12 +114,6 @@ export interface BotConfig {
   minLiquiditySol: number;
   surgeMultiplier5x: number;
   surgeMultiplier10x: number;
-  affiliateRefs: {
-    trojan: string;
-    bonkbot: string;
-    maestro: string;
-    bullx: string;
-  };
   solUsdPrice: number;
 }
 

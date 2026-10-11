@@ -6,50 +6,109 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar, ActiveTab } from './components/Navbar';
 import { LiveSniperFeed } from './components/LiveSniperFeed';
-import { TelegramChannelMockup } from './components/TelegramChannelMockup';
-import { TelegramDMSimulator } from './components/TelegramDMSimulator';
-import { BondingCurveCalculator } from './components/BondingCurveCalculator';
-import { CodeExplorer } from './components/CodeExplorer';
-import { DeploymentDocs } from './components/DeploymentDocs';
-import { TerminalLogs } from './components/TerminalLogs';
 import { PreviousRunnersTicker } from './components/PreviousRunnersTicker';
+import { TerminalLogs } from './components/TerminalLogs';
+import { WatchlistPanel } from './components/WatchlistPanel';
+import { BondingCurveCalculator } from './components/BondingCurveCalculator';
+import { RenderDeployDocs } from './components/RenderDeployDocs';
+import { AuthModal } from './components/AuthModal';
+import { NotificationCenter, AppNotification } from './components/NotificationCenter';
 import { TrackedToken, LogEntry } from './types';
 import { PumpSyncService } from './services/pumpSyncService';
-import { Volume2, VolumeX, Sparkles, Send } from 'lucide-react';
+import { AuthService, AuthUser } from './services/authService';
+import { Volume2, VolumeX, Bell, Trophy, Star, Server, Sparkles, Activity } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('feed');
   const [isLiveWs, setIsLiveWs] = useState(true);
-  const [latencyMs, setLatencyMs] = useState(128);
-  const [blockSlot, setBlockSlot] = useState(455683050);
+  const [latencyMs, setLatencyMs] = useState(115);
+  const [blockSlot, setBlockSlot] = useState(455683100);
   const [tokens, setTokens] = useState<TrackedToken[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  
+  // User Authentication & Watchlist State
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => AuthService.getCurrentUser());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [watchlistMints, setWatchlistMints] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('pumpsurge_watchlist');
+      return saved ? JSON.parse(saved) : ['8YeBTPV58fH6tnzUAihMK1LixsGc1jsN7DAyBoiRpump'];
+    } catch {
+      return [];
+    }
+  });
+
+  // In-App Notification Center State
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([
+    {
+      id: 'notif-seed-1',
+      type: '10x',
+      title: '💥 10X Moonshot Alert!',
+      message: 'Zhunt ($ZNT) reached 12.10x in 38.2s on Solana bonding curve!',
+      mint: '8YeBTPV58fH6tnzUAihMK1LixsGc1jsN7DAyBoiRpump',
+      name: 'Zhunt',
+      symbol: 'ZNT',
+      multiplier: 12.1,
+      marketCapUsd: 61000,
+      timestamp: Date.now() - 360000,
+    },
+    {
+      id: 'notif-seed-2',
+      type: '5x',
+      title: '🚀 5X Multiplier Spike!',
+      message: 'Pepe AI Turbo ($PEPETURBO) surged to 5.42x in only 11.2s!',
+      mint: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+      name: 'Pepe AI Turbo',
+      symbol: 'PEPETURBO',
+      multiplier: 5.42,
+      marketCapUsd: 27360,
+      timestamp: Date.now() - 900000,
+    },
+  ]);
+
+  // Real-time Event Logs Stream
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       id: 'init-1',
       timestamp: Date.now() - 2000,
       level: 'info',
       tag: 'SYSTEM',
-      message: 'PumpSniper Core Engine initialized. Ready to sync live Solana Pump.fun stream.',
+      message: 'PumpSurge App Engine v2.0 initialized. Live Database Connected.',
     },
     {
       id: 'init-2',
       timestamp: Date.now() - 1000,
       level: 'success',
       tag: 'SOLANA',
-      message: 'Solana RPC cluster connected: Commitment [processed]. Target: 6EF8...eF6P.',
-    },
-    {
-      id: 'init-3',
-      timestamp: Date.now() - 500,
-      level: 'info',
-      tag: 'TELEGRAM',
-      message: 'Channel broadcaster synchronized to: https://t.me/PumpSurgeAlerts (@PumpSurgeAlerts).',
+      message: 'Solana RPC cluster connected: Commitment [processed]. Tracking: 6EF8...eF6P.',
     },
   ]);
+
   const [isSyncing, setIsSyncing] = useState(false);
-  const [alertsCount, setAlertsCount] = useState(0);
+  const [alertsCount, setAlertsCount] = useState(2);
   const solUsdPrice = 180.0;
+
+  // Persist watchlist changes
+  useEffect(() => {
+    localStorage.setItem('pumpsurge_watchlist', JSON.stringify(watchlistMints));
+  }, [watchlistMints]);
+
+  const handleToggleWatchlist = (mint: string) => {
+    setWatchlistMints((prev) => {
+      const exists = prev.includes(mint);
+      const next = exists ? prev.filter((m) => m !== mint) : [...prev, mint];
+      const actionLog: LogEntry = {
+        id: `watchlist-${Date.now()}`,
+        timestamp: Date.now(),
+        level: 'info',
+        tag: 'DATABASE',
+        message: `${exists ? 'Removed' : 'Added'} token ${mint.slice(0, 8)}... to personal watchlist.`,
+      };
+      setLogs((l) => [actionLog, ...l]);
+      return next;
+    });
+  };
 
   // Fun synthesized retro Web Audio sound effects for 5x & 10x surges
   const playSurgeAudio = useCallback(
@@ -75,7 +134,7 @@ export default function App() {
         osc.start(now);
         osc.stop(now + 0.35);
       } catch {
-        // AudioContext might be restricted until user gesture
+        // Audio context may require user interaction
       }
     },
     [soundEnabled]
@@ -88,7 +147,6 @@ export default function App() {
       const result = await PumpSyncService.fetchRealTimePumpCoins(solUsdPrice);
       if (result.tokens.length > 0) {
         setTokens(result.tokens);
-        setAlertsCount((prev) => prev + result.tokens.length);
       }
       setLogs((prev) => [...result.newLogs, ...prev].slice(0, 300));
     } catch (err: any) {
@@ -104,6 +162,7 @@ export default function App() {
     const { tokens: emptyTokens, logs: cleanLogs } = PumpSyncService.clearLogsAndCache();
     setTokens(emptyTokens);
     setLogs(cleanLogs);
+    setNotifications([]);
     setAlertsCount(0);
   }, []);
 
@@ -116,7 +175,7 @@ export default function App() {
   useEffect(() => {
     const interval = setInterval(() => {
       setBlockSlot((prev) => prev + 1);
-      setLatencyMs((prev) => Math.max(75, Math.min(210, prev + Math.floor((Math.random() - 0.5) * 10))));
+      setLatencyMs((prev) => Math.max(75, Math.min(190, prev + Math.floor((Math.random() - 0.5) * 8))));
     }, 400);
 
     return () => clearInterval(interval);
@@ -152,19 +211,17 @@ export default function App() {
       buyCount: 1,
       sellCount: 0,
       volumeSol: 1.2,
-      channelMessageId: Math.floor(Math.random() * 9000) + 1000,
       lastTradeTimestamp: Date.now(),
     };
 
     setTokens((prev) => [newToken, ...prev]);
-    setAlertsCount((prev) => prev + 1);
 
     const mintLog: LogEntry = {
       id: `mint-${Date.now()}`,
       timestamp: Date.now(),
       level: 'info',
       tag: 'NEW MINT',
-      message: `Detected new mint: ${chosenName} ($${chosenSymbol}) | CA: ${mint.slice(0, 8)}... | Initial LP: 30 SOL | Alert dispatched to @PumpSurgeAlerts`,
+      message: `Detected new mint: ${chosenName} ($${chosenSymbol}) | CA: ${mint.slice(0, 8)}... | Initial LP: 30 SOL`,
     };
     setLogs((prev) => [mintLog, ...prev]);
   };
@@ -187,22 +244,70 @@ export default function App() {
 
         if (is10xNow && !was10x) {
           playSurgeAudio(true);
+          const timeSec = ((now - token.createdAt) / 1000).toFixed(1);
+          
+          // Dispatch in-app notification
+          const newNotif: AppNotification = {
+            id: `notif-10x-${now}`,
+            type: '10x',
+            title: '💥 10X MOONSHOT ALERT!',
+            message: `${token.name} ($${token.symbol}) skyrocketed to ${newMult.toFixed(1)}x in ${timeSec}s!`,
+            mint: token.mint,
+            name: token.name,
+            symbol: token.symbol,
+            multiplier: newMult,
+            marketCapUsd: newCapSol * solUsdPrice,
+            timestamp: now,
+          };
+          setNotifications((n) => [newNotif, ...n]);
+          setAlertsCount((c) => c + 1);
+
+          // Native desktop notification
+          AuthService.sendDesktopNotification(
+            '💥 10X MOONSHOT ALERT!',
+            `${token.name} ($${token.symbol}) hit ${newMult.toFixed(1)}x ($${Math.round(newCapSol * solUsdPrice).toLocaleString()})!`
+          );
+
           const logEntry: LogEntry = {
             id: `surge-10x-${now}`,
             timestamp: now,
             level: 'alert',
             tag: '10X MOONSHOT',
-            message: `💥💥 10X Surge: ${token.name} ($${token.symbol}) crossed ${newMult.toFixed(1)}x ($${Math.round(newCapSol * solUsdPrice).toLocaleString()})! Reply sent to @PumpSurgeAlerts`,
+            message: `💥💥 10X Surge: ${token.name} ($${token.symbol}) crossed ${newMult.toFixed(1)}x ($${Math.round(newCapSol * solUsdPrice).toLocaleString()})! Notification dispatched.`,
           };
           setLogs((p) => [logEntry, ...p]);
         } else if (is5xNow && !was5x) {
           playSurgeAudio(false);
+          const timeSec = ((now - token.createdAt) / 1000).toFixed(1);
+
+          // Dispatch in-app notification
+          const newNotif: AppNotification = {
+            id: `notif-5x-${now}`,
+            type: '5x',
+            title: '🚀 5X MULTIPLIER DETECTED!',
+            message: `${token.name} ($${token.symbol}) reached ${newMult.toFixed(1)}x in ${timeSec}s velocity window!`,
+            mint: token.mint,
+            name: token.name,
+            symbol: token.symbol,
+            multiplier: newMult,
+            marketCapUsd: newCapSol * solUsdPrice,
+            timestamp: now,
+          };
+          setNotifications((n) => [newNotif, ...n]);
+          setAlertsCount((c) => c + 1);
+
+          // Native desktop notification
+          AuthService.sendDesktopNotification(
+            '🚀 5X MULTIPLIER ALERT!',
+            `${token.name} ($${token.symbol}) reached ${newMult.toFixed(1)}x on Solana bonding curve!`
+          );
+
           const logEntry: LogEntry = {
             id: `surge-5x-${now}`,
             timestamp: now,
             level: 'alert',
             tag: '5X SURGE',
-            message: `🚀🚀 5X Multiplier: ${token.name} ($${token.symbol}) reached ${newMult.toFixed(1)}x in velocity window! Reply sent to @PumpSurgeAlerts`,
+            message: `🚀🚀 5X Multiplier: ${token.name} ($${token.symbol}) reached ${newMult.toFixed(1)}x in velocity window! Notification dispatched.`,
           };
           setLogs((p) => [logEntry, ...p]);
         }
@@ -226,17 +331,22 @@ export default function App() {
     );
   };
 
-  // Direct affiliate references (without PHOTON_REF)
-  const affiliateRefs = {
-    trojan: 'alphasniper',
-    bonkbot: 'alphasniper',
-    maestro: 'alphasniper',
-    bullx: 'alphasniper',
+  const handleLogout = () => {
+    AuthService.logout();
+    setCurrentUser(null);
+    const log: LogEntry = {
+      id: `logout-${Date.now()}`,
+      timestamp: Date.now(),
+      level: 'info',
+      tag: 'AUTH',
+      message: 'User logged out. Switched to public guest session.',
+    };
+    setLogs((l) => [log, ...l]);
   };
 
   return (
     <div className="min-h-screen bg-[#090a0f] text-zinc-100 flex flex-col selection:bg-emerald-500 selection:text-zinc-950">
-      {/* Top Navigation */}
+      {/* Top App Navigation */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -246,16 +356,25 @@ export default function App() {
         blockSlot={blockSlot}
         trackedCount={tokens.length}
         alertsCount={alertsCount}
+        currentUser={currentUser}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
+        onOpenNotifications={() => setIsNotificationsOpen(true)}
+        unreadNotificationsCount={notifications.length}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled(!soundEnabled)}
+        watchlistCount={watchlistMints.length}
       />
 
-      {/* Main Content Body */}
+      {/* Main Content Viewport */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+        {/* RADAR FEED VIEW */}
         {activeTab === 'feed' && (
           <div className="space-y-6">
-            {/* Previous 5x / 10x Runners Hall of Fame */}
+            {/* Previous 5x / 10x Runners Hall of Fame Ticker */}
             <PreviousRunnersTicker
               liveTokens={tokens}
-              onSelectToken={() => setActiveTab('dm')}
+              onSelectToken={() => setActiveTab('feed')}
               solUsdPrice={solUsdPrice}
             />
 
@@ -264,11 +383,13 @@ export default function App() {
               tokens={tokens}
               onSimulateNewMint={handleSimulateNewMint}
               onSimulateTrade={handleSimulateTrade}
-              onSelectTokenForLookup={() => setActiveTab('dm')}
+              onSelectTokenForLookup={() => setActiveTab('feed')}
               onClearLogsAndCache={handleClearLogsAndCache}
               onSyncRealTime={handleSyncRealTime}
               isSyncing={isSyncing}
               solUsdPrice={solUsdPrice}
+              watchlistMints={watchlistMints}
+              onToggleWatchlist={handleToggleWatchlist}
             />
 
             {/* Live Terminal Log Stream docked right under the radar feed */}
@@ -283,6 +404,50 @@ export default function App() {
           </div>
         )}
 
+        {/* 5X / 10X RUNNERS DEDICATED VIEW */}
+        {activeTab === 'runners' && (
+          <div className="space-y-6">
+            <PreviousRunnersTicker
+              liveTokens={tokens}
+              onSelectToken={() => setActiveTab('feed')}
+              solUsdPrice={solUsdPrice}
+            />
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-3xl p-6 shadow-xl">
+              <h3 className="font-bold text-base text-white mb-2 flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-amber-400" />
+                Active Multiplier Runners Filtering
+              </h3>
+              <p className="text-xs text-zinc-400 mb-6">
+                All tokens that have surged 5x, 10x, and above during current and previous on-chain tracking sessions.
+              </p>
+              <LiveSniperFeed
+                tokens={tokens.filter((t) => t.highestMultiplier >= 2.0)}
+                onSimulateNewMint={handleSimulateNewMint}
+                onSimulateTrade={handleSimulateTrade}
+                onSelectTokenForLookup={() => {}}
+                onClearLogsAndCache={handleClearLogsAndCache}
+                onSyncRealTime={handleSyncRealTime}
+                isSyncing={isSyncing}
+                solUsdPrice={solUsdPrice}
+                watchlistMints={watchlistMints}
+                onToggleWatchlist={handleToggleWatchlist}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* WATCHLIST VIEW */}
+        {activeTab === 'watchlist' && (
+          <WatchlistPanel
+            watchlistMints={watchlistMints}
+            tokens={tokens}
+            onToggleWatchlist={handleToggleWatchlist}
+            onSelectToken={() => setActiveTab('feed')}
+            solUsdPrice={solUsdPrice}
+          />
+        )}
+
+        {/* LIVE TERMINAL VIEW */}
         {activeTab === 'logs' && (
           <TerminalLogs
             logs={logs}
@@ -292,61 +457,59 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'telegram' && (
-          <TelegramChannelMockup
-            tokens={tokens}
-            channelName="@PumpSurgeAlerts"
-            affiliateRefs={affiliateRefs}
-            solUsdPrice={solUsdPrice}
-          />
-        )}
-
-        {activeTab === 'dm' && (
-          <TelegramDMSimulator
-            tokens={tokens}
-            solUsdPrice={solUsdPrice}
-          />
-        )}
-
+        {/* BONDING CURVE MATH CALCULATOR */}
         {activeTab === 'curve' && (
           <BondingCurveCalculator solUsdPrice={solUsdPrice} />
         )}
 
-        {activeTab === 'code' && <CodeExplorer />}
-
-        {activeTab === 'vps' && <DeploymentDocs />}
+        {/* RENDER DEPLOYMENT SETTINGS */}
+        {activeTab === 'render' && <RenderDeployDocs />}
       </main>
 
-      {/* Institutional Web3 Terminal Footer */}
-      <footer className="border-t border-zinc-900 bg-[#07080c] py-6 px-4 text-xs text-zinc-500">
+      {/* Registration & Authentication Portal Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={(user) => {
+          setCurrentUser(user);
+          const log: LogEntry = {
+            id: `auth-success-${Date.now()}`,
+            timestamp: Date.now(),
+            level: 'success',
+            tag: 'DATABASE',
+            message: `User ${user.username} authenticated. Live database connected.`,
+          };
+          setLogs((l) => [log, ...l]);
+        }}
+      />
+
+      {/* In-App Notification Center Drawer */}
+      <NotificationCenter
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+        notifications={notifications}
+        onClearAll={() => setNotifications([])}
+        onSelectToken={() => setIsNotificationsOpen(false)}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled(!soundEnabled)}
+      />
+
+      {/* App Footer */}
+      <footer className="border-t border-zinc-900 bg-[#07080c] py-5 px-4 text-xs text-zinc-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="font-semibold text-zinc-400">PumpSniper Core Engine</span>
+            <span className="font-semibold text-zinc-300">PumpSurge Web &amp; Mobile App</span>
             <span>•</span>
-            <a
-              href="https://t.me/PumpSurgeAlerts"
-              target="_blank"
-              rel="noreferrer"
-              className="text-cyan-400 hover:underline flex items-center gap-1 font-semibold"
-            >
-              <Send className="w-3 h-3" />
-              <span>@PumpSurgeAlerts</span>
-            </a>
+            <span className="font-mono text-zinc-500">Render Production Ready</span>
           </div>
 
           <div className="flex items-center gap-4 text-[11px]">
-            <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className="flex items-center gap-1 text-zinc-400 hover:text-white transition px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800"
-            >
-              {soundEnabled ? <Volume2 className="w-3 h-3 text-emerald-400" /> : <VolumeX className="w-3 h-3 text-zinc-500" />}
-              <span>Surge Audio: {soundEnabled ? 'ON' : 'OFF'}</span>
-            </button>
+            <span>Live SQLite/JSON Database</span>
             <span>•</span>
-            <span>Direct Photon Routing</span>
+            <span>Gmail Registration Portal</span>
             <span>•</span>
-            <span>Real-time Solana Mainnet Data</span>
+            <span>5x/10x Push Notifications</span>
           </div>
         </div>
       </footer>

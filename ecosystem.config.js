@@ -6,9 +6,9 @@
 module.exports = {
   apps: [
     {
-      name: 'pumpfun-telegram-bot',
+      name: 'pumpsurge-app',
       script: 'node_modules/.bin/tsx',
-      args: 'src/index.ts',
+      args: 'server.ts',
       cwd: './',
       instances: 1,
       autorestart: true,

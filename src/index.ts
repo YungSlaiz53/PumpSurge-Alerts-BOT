@@ -6,29 +6,18 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { PumpListener } from './pumpListener';
-import { TelegramAlertBot } from './telegramBot';
-import { BotConfig } from './types';
+import { PumpListener } from './pumpListener.ts';
+import { AppDatabase } from './db/database.ts';
+import { AppConfig, TrackedToken } from './types.ts';
 
-// Load and validate environment variables
-function loadConfiguration(): BotConfig {
-  const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
-  const telegramChannelId = process.env.TELEGRAM_CHANNEL_ID;
+// Load and validate application environment variables
+function loadConfiguration(): AppConfig {
   const solanaRpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
   const solanaWssUrl = process.env.SOLANA_WSS_URL || solanaRpcUrl.replace(/^http/, 'ws');
 
-  if (!telegramBotToken || telegramBotToken.includes('1234567890:ABCdefGh')) {
-    console.warn('⚠️ [CONFIG] TELEGRAM_BOT_TOKEN is missing or using default placeholder.');
-  }
-
-  if (!telegramChannelId) {
-    console.warn('⚠️ [CONFIG] TELEGRAM_CHANNEL_ID is not configured. Falling back to @PumpSurgeAlerts.');
-  }
-
   return {
-    telegramBotToken: telegramBotToken || 'MOCK_TOKEN',
-    telegramChannelId: telegramChannelId || '@PumpSurgeAlerts',
-    telegramAdminUserId: process.env.TELEGRAM_ADMIN_USER_ID,
+    port: Number(process.env.PORT) || 3000,
+    nodeEnv: process.env.NODE_ENV || 'production',
     solanaRpcUrl,
     solanaWssUrl,
     solanaCommitment: (process.env.SOLANA_COMMITMENT as any) || 'processed',
@@ -37,29 +26,27 @@ function loadConfiguration(): BotConfig {
     minLiquiditySol: Number(process.env.MIN_LIQUIDITY_SOL) || 0,
     surgeMultiplier5x: Number(process.env.ALERT_SURGE_MULTIPLIER_5X) || 5.0,
     surgeMultiplier10x: Number(process.env.ALERT_SURGE_MULTIPLIER_10X) || 10.0,
-    affiliateRefs: {
-      trojan: process.env.TROJAN_REF || 'alphasniper',
-      bonkbot: process.env.BONKBOT_REF || 'alphasniper',
-      maestro: process.env.MAESTRO_REF || 'alphasniper',
-      bullx: process.env.BULLX_REF || 'alphasniper',
-    },
     solUsdPrice: Number(process.env.DEFAULT_SOL_USD_PRICE) || 180.0,
   };
 }
 
 async function main() {
   console.log('================================================================');
-  console.log('🚀 PUMP.FUN TELEGRAM SNIPING & ALERT BOT ENGINE');
+  console.log('🚀 PUMPSURGE SOLANA APP - BACKGROUND ENGINE & LIVE DB LINK');
   console.log('================================================================');
 
   const config = loadConfiguration();
-  console.log(`[INIT] Solana RPC: ${config.solanaRpcUrl}`);
-  console.log(`[INIT] Solana WSS: ${config.solanaWssUrl}`);
-  console.log(`[INIT] Program ID: ${config.pumpProgramId}`);
-  console.log(`[INIT] Channel ID: ${config.telegramChannelId}`);
-  console.log(`[INIT] Surge Window: ${config.priceSurgeWindowSeconds}s (5x: ${config.surgeMultiplier5x}x, 10x: ${config.surgeMultiplier10x}x)`);
+  const db = AppDatabase.getInstance();
 
-  // 1. Initialize Solana Pump.fun WebSocket Listener
+  console.log(`[ENGINE] Solana RPC: ${config.solanaRpcUrl}`);
+  console.log(`[ENGINE] Solana WSS: ${config.solanaWssUrl}`);
+  console.log(`[ENGINE] Program ID: ${config.pumpProgramId}`);
+  console.log(`[ENGINE] Surge Thresholds: 5x (${config.surgeMultiplier5x}x) | 10x (${config.surgeMultiplier10x}x)`);
+  console.log(`[ENGINE] Live Database: Connected (Ready for persistence)`);
+
+  const activeTokens = new Map<string, TrackedToken>();
+
+  // Initialize Solana Pump.fun WebSocket Listener
   const listener = new PumpListener({
     rpcUrl: config.solanaRpcUrl,
     wssUrl: config.solanaWssUrl,
@@ -68,56 +55,128 @@ async function main() {
     solUsdPrice: config.solUsdPrice,
   });
 
-  // 2. Initialize Telegram Bot
-  const bot = new TelegramAlertBot(config, listener);
-
-  // Wire listener operational events
   listener.on('connected', (info) => {
-    console.log(`🟢 [LISTENER] Solana WebSocket connected! (Slot: ${info.slot}, Program: ${info.programId})`);
+    console.log(`🟢 [SOLANA] WebSocket active! (Slot: ${info.slot}, Program: ${info.programId})`);
   });
 
   listener.on('disconnected', (err) => {
-    console.error('🔴 [LISTENER] Solana WebSocket disconnected:', err);
+    console.error('🔴 [SOLANA] WebSocket disconnected:', err);
   });
 
   listener.on('error', (err) => {
-    console.error('⚠️ [LISTENER] Runtime error:', err);
+    console.error('⚠️ [SOLANA] Listener runtime warning:', err);
   });
 
+  // Track new mint creations
   listener.on('create', (event) => {
-    console.log(`✨ [NEW MINT] ${event.name} ($${event.symbol}) | Mint: ${event.mint} | Dev: ${event.user.slice(0, 6)}...`);
-  });
+    console.log(`✨ [NEW MINT] ${event.name} ($${event.symbol}) | CA: ${event.mint}`);
 
-  listener.on('trade', (event) => {
-    if (event.isBuy) {
-      console.log(`🟢 [BUY] Mint: ${event.mint.slice(0, 8)}... | Sol: ${(Number(event.solAmount) / 1e9).toFixed(3)} | Cap: ${event.marketCapSol.toFixed(1)} SOL`);
-    } else {
-      console.log(`🔴 [SELL] Mint: ${event.mint.slice(0, 8)}... | Sol: ${(Number(event.solAmount) / 1e9).toFixed(3)} | Cap: ${event.marketCapSol.toFixed(1)} SOL`);
+    const tracked: TrackedToken = {
+      mint: event.mint,
+      name: event.name,
+      symbol: event.symbol,
+      uri: event.uri,
+      creator: event.user,
+      bondingCurve: event.bondingCurve,
+      createdAt: event.timestamp || Date.now(),
+      initialPriceSol: event.initialPriceSol,
+      initialMarketCapSol: event.initialMarketCapSol,
+      initialMarketCapUsd: event.initialMarketCapUsd,
+      currentPriceSol: event.initialPriceSol,
+      currentMarketCapSol: event.initialMarketCapSol,
+      currentMarketCapUsd: event.initialMarketCapUsd,
+      highestMultiplier: 1.0,
+      notified5x: false,
+      notified10x: false,
+      tradeCount: 0,
+      buyCount: 0,
+      sellCount: 0,
+      volumeSol: 0,
+      lastTradeTimestamp: Date.now(),
+    };
+
+    activeTokens.set(event.mint, tracked);
+
+    // Keep map bounded to prevent memory leakage
+    if (activeTokens.size > 2000) {
+      const oldestKey = activeTokens.keys().next().value;
+      if (oldestKey) activeTokens.delete(oldestKey);
     }
   });
 
-  // 3. Start Listener & Bot
+  // Monitor trades for 5x and 10x velocity spikes and persist to live database
+  listener.on('trade', (event) => {
+    const token = activeTokens.get(event.mint);
+    if (!token) return;
+
+    token.tradeCount += 1;
+    if (event.isBuy) token.buyCount += 1;
+    else token.sellCount += 1;
+    token.volumeSol += Number(event.solAmount) / 1e9;
+    token.currentPriceSol = event.priceSol;
+    token.currentMarketCapSol = event.marketCapSol;
+    token.currentMarketCapUsd = event.marketCapSol * config.solUsdPrice;
+    token.lastTradeTimestamp = Date.now();
+
+    const multiplier = token.initialPriceSol > 0 ? token.currentPriceSol / token.initialPriceSol : 1.0;
+
+    if (multiplier > token.highestMultiplier) {
+      token.highestMultiplier = multiplier;
+    }
+
+    const elapsedSeconds = (Date.now() - token.createdAt) / 1000;
+
+    // Check 10x Spike
+    if (multiplier >= config.surgeMultiplier10x && !token.notified10x) {
+      token.notified10x = true;
+      token.surgeTime10x = Date.now() - token.createdAt;
+
+      console.log(`💥💥 [10X MOONSHOT] ${token.name} ($${token.symbol}) hit ${multiplier.toFixed(2)}x in ${elapsedSeconds.toFixed(1)}s! Persisting to database.`);
+
+      db.recordSurgeAlert({
+        mint: token.mint,
+        name: token.name,
+        symbol: token.symbol,
+        multiplier: Number(multiplier.toFixed(2)),
+        targetMultiplier: 10,
+        timeElapsedSeconds: Number(elapsedSeconds.toFixed(1)),
+        marketCapUsd: Math.round(token.currentMarketCapUsd),
+        marketCapSol: Number(token.currentMarketCapSol.toFixed(2)),
+      });
+    }
+    // Check 5x Spike
+    else if (multiplier >= config.surgeMultiplier5x && !token.notified5x) {
+      token.notified5x = true;
+      token.surgeTime5x = Date.now() - token.createdAt;
+
+      console.log(`🚀 [5X SURGE] ${token.name} ($${token.symbol}) hit ${multiplier.toFixed(2)}x in ${elapsedSeconds.toFixed(1)}s! Persisting to database.`);
+
+      db.recordSurgeAlert({
+        mint: token.mint,
+        name: token.name,
+        symbol: token.symbol,
+        multiplier: Number(multiplier.toFixed(2)),
+        targetMultiplier: 5,
+        timeElapsedSeconds: Number(elapsedSeconds.toFixed(1)),
+        marketCapUsd: Math.round(token.currentMarketCapUsd),
+        marketCapSol: Number(token.currentMarketCapSol.toFixed(2)),
+      });
+    }
+  });
+
+  // Start Listener
   try {
     await listener.start();
-
-    if (config.telegramBotToken && !config.telegramBotToken.includes('MOCK_TOKEN')) {
-      await bot.launch();
-    } else {
-      console.log('ℹ️ [TELEGRAM] Running in listener dry-run mode (set valid TELEGRAM_BOT_TOKEN to enable live broadcasting).');
-    }
-
-    console.log('⚡ Bot is fully operational and sniping Pump.fun events.');
+    console.log('⚡ Background Pump.fun Sniper Engine running successfully.');
   } catch (error) {
-    console.error('💥 Fatal error during bot startup:', error);
-    process.exit(1);
+    console.error('💥 Error launching background listener:', error);
   }
 
   // Graceful shutdown handling
   const shutdown = async () => {
-    console.log('\n🛑 Gracefully shutting down bot services...');
+    console.log('\n🛑 Gracefully shutting down PumpSurge engine...');
     await listener.stop();
-    bot.stop();
-    console.log('👋 Bot shutdown complete.');
+    console.log('👋 Engine shutdown complete.');
     process.exit(0);
   };
 

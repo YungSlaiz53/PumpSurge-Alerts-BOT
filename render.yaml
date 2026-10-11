@@ -1,0 +1,24 @@
+# Render Deployment Blueprint for PumpSurge Solana App
+# Deploy by connecting your GitHub repo at https://dashboard.render.com
+
+services:
+  - type: web
+    name: pumpsurge-solana-app
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SOLANA_RPC_URL
+        value: https://api.mainnet-beta.solana.com
+      - key: SOLANA_WSS_URL
+        value: wss://api.mainnet-beta.solana.com
+      - key: PUMP_PROGRAM_ID
+        value: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
+      - key: DEFAULT_SOL_USD_PRICE
+        value: 180.0

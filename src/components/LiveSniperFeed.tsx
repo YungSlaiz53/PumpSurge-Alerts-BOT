@@ -20,7 +20,8 @@ import {
   Play,
   RotateCcw,
   RefreshCw,
-  Trash2
+  Trash2,
+  Star
 } from 'lucide-react';
 import { TrackedToken } from '../types';
 
@@ -33,6 +34,8 @@ interface LiveSniperFeedProps {
   onSyncRealTime: () => void;
   isSyncing: boolean;
   solUsdPrice: number;
+  watchlistMints?: string[];
+  onToggleWatchlist?: (mint: string) => void;
 }
 
 export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
@@ -44,6 +47,8 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
   onSyncRealTime,
   isSyncing,
   solUsdPrice,
+  watchlistMints = [],
+  onToggleWatchlist = () => {},
 }) => {
   const [copiedMint, setCopiedMint] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
@@ -224,14 +229,14 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                     : 'border-zinc-800/90'
                 }`}
               >
-                {/* Glow pill for Moonshot / 5x */}
+                {/* Glow pill for Moonshot / 5x with subtle breathing animation */}
                 {is10x && (
-                  <div className="absolute top-0 right-0 px-3 py-1 bg-amber-500 text-zinc-950 font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1">
-                    <Flame className="w-3 h-3 fill-zinc-950" /> 10X MOONSHOT
+                  <div className="absolute top-0 right-0 px-3 py-1 bg-amber-500 text-zinc-950 font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1 animate-breathe-10x origin-top-right z-10">
+                    <Flame className="w-3 h-3 fill-zinc-950 animate-bounce" /> 10X MOONSHOT
                   </div>
                 )}
                 {is5x && (
-                  <div className="absolute top-0 right-0 px-3 py-1 bg-purple-500 text-zinc-950 font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1">
+                  <div className="absolute top-0 right-0 px-3 py-1 bg-purple-500 text-zinc-950 font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1 animate-breathe-5x origin-top-right z-10">
                     <Zap className="w-3 h-3 fill-zinc-950" /> 5X SURGE DETECTED
                   </div>
                 )}
@@ -248,6 +253,13 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                         <span className="text-xs font-mono font-bold text-emerald-400 shrink-0">
                           ${token.symbol}
                         </span>
+                        <button
+                          onClick={() => onToggleWatchlist(token.mint)}
+                          className="p-1 rounded-md text-zinc-500 hover:text-amber-400 transition"
+                          title={watchlistMints.includes(token.mint) ? 'Remove from Watchlist' : 'Add to Database Watchlist'}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${watchlistMints.includes(token.mint) ? 'fill-amber-400 text-amber-400' : ''}`} />
+                        </button>
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-zinc-400 mt-0.5">
                         <span className="flex items-center gap-1 text-zinc-500">
@@ -302,9 +314,9 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                           </span>
                         )}
                       </div>
-                      <div className={`font-black text-sm mt-0.5 ${
-                        token.highestMultiplier >= 10 ? 'text-amber-400' :
-                        token.highestMultiplier >= 5 ? 'text-purple-400' :
+                      <div className={`font-black text-sm mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded-md ${
+                        token.highestMultiplier >= 10 ? 'text-amber-300 bg-amber-950/40 border border-amber-500/40 animate-breathe-10x' :
+                        token.highestMultiplier >= 5 ? 'text-purple-300 bg-purple-950/40 border border-purple-500/40 animate-breathe-5x' :
                         token.highestMultiplier > 1 ? 'text-emerald-400' : 'text-zinc-200'
                       }`}>
                         {token.highestMultiplier.toFixed(2)}x
@@ -354,15 +366,15 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                     </button>
                   </div>
 
-                  {/* Multi-DEX Affiliate Sniper Buttons */}
+                  {/* Direct Web3 Sniper & DEX Action Buttons */}
                   <div className="grid grid-cols-3 gap-1.5 pt-1">
                     <a
-                      href={`https://t.me/solana_trojanbot?start=r-alphasniper_${token.mint}`}
+                      href={`https://pump.fun/coin/${token.mint}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-2 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-center text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 transition flex items-center justify-center gap-1"
+                      className="px-2 py-1.5 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-center text-[10px] font-semibold text-emerald-300 hover:text-white transition flex items-center justify-center gap-1"
                     >
-                      ⚡ Trojan
+                      💊 Pump.fun
                     </a>
                     <a
                       href={`https://photon-sol.tinyastro.io/en/lp/${token.mint}`}

@@ -28,3 +28,39 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
+/* Subtle breathing pulse animation for surge badges */
+@keyframes breathe5x {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4), 0 0 10px rgba(168, 85, 247, 0.2);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.035);
+    box-shadow: 0 0 0 5px rgba(168, 85, 247, 0), 0 0 20px rgba(168, 85, 247, 0.55);
+    filter: brightness(1.12);
+  }
+}
+
+@keyframes breathe10x {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.45), 0 0 12px rgba(245, 158, 11, 0.25);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.045);
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0), 0 0 24px rgba(245, 158, 11, 0.65);
+    filter: brightness(1.16);
+  }
+}
+
+.animate-breathe-5x {
+  animation: breathe5x 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-breathe-10x {
+  animation: breathe10x 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
