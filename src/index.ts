@@ -40,7 +40,6 @@ function loadConfiguration(): BotConfig {
     affiliateRefs: {
       trojan: process.env.TROJAN_REF || 'alphasniper',
       bonkbot: process.env.BONKBOT_REF || 'alphasniper',
-      photon: process.env.PHOTON_REF || 'alphasniper',
       maestro: process.env.MAESTRO_REF || 'alphasniper',
       bullx: process.env.BULLX_REF || 'alphasniper',
     },

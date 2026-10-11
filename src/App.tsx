@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar, ActiveTab } from './components/Navbar';
 import { LiveSniperFeed } from './components/LiveSniperFeed';
 import { TelegramChannelMockup } from './components/TelegramChannelMockup';
@@ -11,99 +11,73 @@ import { TelegramDMSimulator } from './components/TelegramDMSimulator';
 import { BondingCurveCalculator } from './components/BondingCurveCalculator';
 import { CodeExplorer } from './components/CodeExplorer';
 import { DeploymentDocs } from './components/DeploymentDocs';
-import { TrackedToken } from './types';
-
-// Initial realistic sample tokens for simulation
-const INITIAL_SAMPLE_TOKENS: TrackedToken[] = [
-  {
-    mint: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
-    name: 'Pepe AI Turbo',
-    symbol: 'PEPETURBO',
-    uri: 'https://ipfs.io/ipfs/QmSample1',
-    creator: '4pE3e9wFFhD1Qz12q8nL7pU9qK4mN8qP3dF6hC2eA1',
-    bondingCurve: '8mZ7tV1kS5mN8qP3dF6hC2eA17kL9W9uL4rZ7tV1kS5',
-    createdAt: Date.now() - 14000,
-    initialPriceSol: 0.000000028,
-    initialMarketCapSol: 28.0,
-    currentPriceSol: 0.000000152,
-    currentMarketCapSol: 152.0,
-    currentMarketCapUsd: 152.0 * 180.0,
-    highestMultiplier: 5.42,
-    notified5x: true,
-    notified10x: false,
-    surgeTime5x: 11200,
-    tradeCount: 64,
-    buyCount: 52,
-    sellCount: 12,
-    volumeSol: 38.4,
-    channelMessageId: 1042,
-    lastTradeTimestamp: Date.now(),
-  },
-  {
-    mint: '9wQz12q8nL7pU9qK4mN8qP3dF6hC2eA18xK1M7gQpX2',
-    name: 'Neural Doge Solana',
-    symbol: 'NDOGE',
-    uri: 'https://ipfs.io/ipfs/QmSample2',
-    creator: 'G3HY9jz8qqQ24db6b7fb7492a54JNt7f7RJKlQ24db6',
-    bondingCurve: '2eA18xK1M7gQpX2bJ9W9uL4rZ7tV1kS5mN8qP3dF6hC',
-    createdAt: Date.now() - 48000,
-    initialPriceSol: 0.000000028,
-    initialMarketCapSol: 28.0,
-    currentPriceSol: 0.000000295,
-    currentMarketCapSol: 295.0,
-    currentMarketCapUsd: 295.0 * 180.0,
-    highestMultiplier: 10.53,
-    notified5x: true,
-    notified10x: true,
-    surgeTime5x: 9800,
-    surgeTime10x: 32400,
-    tradeCount: 142,
-    buyCount: 118,
-    sellCount: 24,
-    volumeSol: 71.8,
-    channelMessageId: 1038,
-    lastTradeTimestamp: Date.now(),
-  },
-  {
-    mint: '3dF6hC2eA18xK1M7gQpX2bJ9W9uL4rZ7tV1kS5mN8qP',
-    name: 'Quantum Cat',
-    symbol: 'QCAT',
-    uri: 'https://ipfs.io/ipfs/QmSample3',
-    creator: '7pU9qK4mN8qP3dF6hC2eA18xK1M7gQpX2bJ9W9uL4',
-    bondingCurve: '5mN8qP3dF6hC2eA18xK1M7gQpX2bJ9W9uL4rZ7tV1k',
-    createdAt: Date.now() - 8000,
-    initialPriceSol: 0.000000028,
-    initialMarketCapSol: 28.0,
-    currentPriceSol: 0.000000034,
-    currentMarketCapSol: 34.0,
-    currentMarketCapUsd: 34.0 * 180.0,
-    highestMultiplier: 1.21,
-    notified5x: false,
-    notified10x: false,
-    tradeCount: 11,
-    buyCount: 9,
-    sellCount: 2,
-    volumeSol: 4.8,
-    channelMessageId: 1045,
-    lastTradeTimestamp: Date.now(),
-  },
-];
+import { TerminalLogs } from './components/TerminalLogs';
+import { TrackedToken, LogEntry } from './types';
+import { PumpSyncService } from './services/pumpSyncService';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('feed');
   const [isLiveWs, setIsLiveWs] = useState(true);
-  const [latencyMs, setLatencyMs] = useState(138);
-  const [blockSlot, setBlockSlot] = useState(314892140);
-  const [tokens, setTokens] = useState<TrackedToken[]>(INITIAL_SAMPLE_TOKENS);
-  const [alertsCount, setAlertsCount] = useState(48);
+  const [latencyMs, setLatencyMs] = useState(128);
+  const [blockSlot, setBlockSlot] = useState(455683050);
+  const [tokens, setTokens] = useState<TrackedToken[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([
+    {
+      id: 'init-1',
+      timestamp: Date.now() - 2000,
+      level: 'info',
+      tag: 'SYSTEM',
+      message: 'PumpSniper Core Engine initialized. Ready to sync live Solana Pump.fun stream.',
+    },
+    {
+      id: 'init-2',
+      timestamp: Date.now() - 1000,
+      level: 'success',
+      tag: 'SOLANA',
+      message: 'Solana RPC cluster connected: Commitment [processed]. Target: 6EF8...eF6P.',
+    },
+  ]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [alertsCount, setAlertsCount] = useState(0);
   const solUsdPrice = 180.0;
+
+  // Real-time synchronization function
+  const handleSyncRealTime = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const result = await PumpSyncService.fetchRealTimePumpCoins(solUsdPrice);
+      if (result.tokens.length > 0) {
+        setTokens(result.tokens);
+        setAlertsCount((prev) => prev + result.tokens.length);
+      }
+      setLogs((prev) => [...result.newLogs, ...prev].slice(0, 300));
+    } catch (err: any) {
+      const errLog = PumpSyncService.createLog('error', 'SYNC ERROR', err.message || 'Failed to fetch live coins');
+      setLogs((prev) => [errLog, ...prev]);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [solUsdPrice]);
+
+  // Clean reset of logs and cache
+  const handleClearLogsAndCache = useCallback(() => {
+    const { tokens: emptyTokens, logs: cleanLogs } = PumpSyncService.clearLogsAndCache();
+    setTokens(emptyTokens);
+    setLogs(cleanLogs);
+    setAlertsCount(0);
+  }, []);
+
+  // Synchronize live real-time coins from Pump.fun on initial load
+  useEffect(() => {
+    handleSyncRealTime();
+  }, [handleSyncRealTime]);
 
   // Simulate Solana block slot progression and small latency fluctuations
   useEffect(() => {
     const interval = setInterval(() => {
       setBlockSlot((prev) => prev + 1);
-      setLatencyMs((prev) => Math.max(85, Math.min(220, prev + Math.floor((Math.random() - 0.5) * 12))));
-    }, 450);
+      setLatencyMs((prev) => Math.max(75, Math.min(210, prev + Math.floor((Math.random() - 0.5) * 10))));
+    }, 400);
 
     return () => clearInterval(interval);
   }, []);
@@ -111,7 +85,7 @@ export default function App() {
   // Handler to simulate an instant new Pump.fun mint event
   const handleSimulateNewMint = () => {
     const randomHex = () => Math.random().toString(36).substring(2, 8).toUpperCase();
-    const names = ['Solana Frog', 'Based Grok', 'Moon Whales', 'Hyper Velocity', 'Cyber Doge', 'Axiom Pulse'];
+    const names = ['Axiom Velocity', 'Moonshot Grok', 'Solana Turbo Cat', 'Quantum Pepe', 'Cyber Whales'];
     const chosenName = `${names[Math.floor(Math.random() * names.length)]} ${Math.floor(Math.random() * 99)}`;
     const chosenSymbol = chosenName.split(' ')[0].substring(0, 5).toUpperCase();
     const mint = `${randomHex()}${randomHex()}${randomHex()}${randomHex()}pump`;
@@ -127,6 +101,7 @@ export default function App() {
       createdAt: Date.now(),
       initialPriceSol: 0.000000028,
       initialMarketCapSol: 28.0,
+      initialMarketCapUsd: 28.0 * solUsdPrice,
       currentPriceSol: 0.000000028,
       currentMarketCapSol: 28.0,
       currentMarketCapUsd: 28.0 * solUsdPrice,
@@ -141,8 +116,17 @@ export default function App() {
       lastTradeTimestamp: Date.now(),
     };
 
-    setTokens((prev) => [newToken, ...prev.slice(0, 19)]);
+    setTokens((prev) => [newToken, ...prev]);
     setAlertsCount((prev) => prev + 1);
+
+    const mintLog: LogEntry = {
+      id: `mint-${Date.now()}`,
+      timestamp: Date.now(),
+      level: 'info',
+      tag: 'NEW MINT',
+      message: `Detected new mint: ${chosenName} ($${chosenSymbol}) | CA: ${mint.slice(0, 8)}... | Initial LP: 30 SOL`,
+    };
+    setLogs((prev) => [mintLog, ...prev]);
   };
 
   // Handler to simulate buying waves or 5x/10x surges on a token
@@ -161,6 +145,26 @@ export default function App() {
         const is5xNow = newMult >= 5.0;
         const is10xNow = newMult >= 10.0;
 
+        if (is10xNow && !was10x) {
+          const logEntry: LogEntry = {
+            id: `surge-10x-${now}`,
+            timestamp: now,
+            level: 'alert',
+            tag: '10X MOONSHOT',
+            message: `💥💥 10X Surge: ${token.name} ($${token.symbol}) crossed ${newMult.toFixed(1)}x ($${Math.round(newCapSol * solUsdPrice).toLocaleString()})!`,
+          };
+          setLogs((p) => [logEntry, ...p]);
+        } else if (is5xNow && !was5x) {
+          const logEntry: LogEntry = {
+            id: `surge-5x-${now}`,
+            timestamp: now,
+            level: 'alert',
+            tag: '5X SURGE',
+            message: `🚀🚀 5X Multiplier: ${token.name} ($${token.symbol}) reached ${newMult.toFixed(1)}x in velocity window!`,
+          };
+          setLogs((p) => [logEntry, ...p]);
+        }
+
         return {
           ...token,
           highestMultiplier: newMult,
@@ -173,17 +177,17 @@ export default function App() {
           surgeTime10x: token.surgeTime10x || (is10xNow ? now - token.createdAt : undefined),
           tradeCount: token.tradeCount + 5,
           buyCount: token.buyCount + 5,
-          volumeSol: token.volumeSol + 12.5,
+          volumeSol: token.volumeSol + 14.5,
           lastTradeTimestamp: now,
         };
       })
     );
   };
 
+  // Direct affiliate references (without PHOTON_REF)
   const affiliateRefs = {
     trojan: 'alphasniper',
     bonkbot: 'alphasniper',
-    photon: 'alphasniper',
     maestro: 'alphasniper',
     bullx: 'alphasniper',
   };
@@ -203,16 +207,38 @@ export default function App() {
       />
 
       {/* Main Content Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {activeTab === 'feed' && (
-          <LiveSniperFeed
-            tokens={tokens}
-            onSimulateNewMint={handleSimulateNewMint}
-            onSimulateTrade={handleSimulateTrade}
-            onSelectTokenForLookup={(mint) => {
-              setActiveTab('dm');
-            }}
-            solUsdPrice={solUsdPrice}
+          <div className="space-y-6">
+            <LiveSniperFeed
+              tokens={tokens}
+              onSimulateNewMint={handleSimulateNewMint}
+              onSimulateTrade={handleSimulateTrade}
+              onSelectTokenForLookup={() => setActiveTab('dm')}
+              onClearLogsAndCache={handleClearLogsAndCache}
+              onSyncRealTime={handleSyncRealTime}
+              isSyncing={isSyncing}
+              solUsdPrice={solUsdPrice}
+            />
+
+            {/* Live Terminal Log Stream docked right under the radar feed */}
+            <div className="pt-4 border-t border-zinc-800/80">
+              <TerminalLogs
+                logs={logs}
+                onClearLogs={handleClearLogsAndCache}
+                onSyncRealTime={handleSyncRealTime}
+                isSyncing={isSyncing}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'logs' && (
+          <TerminalLogs
+            logs={logs}
+            onClearLogs={handleClearLogsAndCache}
+            onSyncRealTime={handleSyncRealTime}
+            isSyncing={isSyncing}
           />
         )}
 
@@ -254,9 +280,9 @@ export default function App() {
           <div className="flex items-center gap-4 text-[11px]">
             <span>100% Free Forever</span>
             <span>•</span>
-            <span>Affiliate Trading Routing</span>
+            <span>Direct Photon Routing (No Referral)</span>
             <span>•</span>
-            <span>Node.js / TypeScript / Telegraf</span>
+            <span>Real-time Solana Mainnet Data</span>
           </div>
         </div>
       </footer>

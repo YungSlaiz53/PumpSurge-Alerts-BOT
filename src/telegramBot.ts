@@ -491,8 +491,8 @@ ${headerEmoji}
     const bonkbotUrl = `https://t.me/bonkbot_bot?start=ref_${refs.bonkbot}_ca_${mint}`;
     const maestroUrl = `https://t.me/maestro?start=${mint}-${refs.maestro}`;
 
-    // Web DEX & Terminal links with referrals
-    const photonUrl = `https://photon-sol.tinyastro.io/en/lp/${mint}?handle=${refs.photon}`;
+    // Web DEX & Terminal links (Photon routed directly without referral)
+    const photonUrl = `https://photon-sol.tinyastro.io/en/lp/${mint}`;
     const bullxUrl = `https://bullx.io/terminal?chainId=1399811149&address=${mint}&r=${refs.bullx}`;
     const dexscreenerUrl = `https://dexscreener.com/solana/${mint}`;
     const pumpfunUrl = `https://pump.fun/${mint}`;

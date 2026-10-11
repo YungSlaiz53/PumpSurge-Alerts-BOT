@@ -44,7 +44,6 @@ function loadConfiguration(): BotConfig {
     affiliateRefs: {
       trojan: process.env.TROJAN_REF || 'alphasniper',
       bonkbot: process.env.BONKBOT_REF || 'alphasniper',
-      photon: process.env.PHOTON_REF || 'alphasniper',
       maestro: process.env.MAESTRO_REF || 'alphasniper',
       bullx: process.env.BULLX_REF || 'alphasniper',
     },
@@ -266,7 +265,7 @@ export class TelegramAlertBot {
         Markup.button.url('🤖 BonkBot', \`https://t.me/bonkbot_bot?start=ref_\${refs.bonkbot}_ca_\${mint}\`),
       ],
       [
-        Markup.button.url('🚀 Photon Web', \`https://photon-sol.tinyastro.io/en/lp/\${mint}?handle=\${refs.photon}\`),
+        Markup.button.url('🚀 Photon Web', \`https://photon-sol.tinyastro.io/en/lp/\${mint}\`),
         Markup.button.url('📊 DexScreener', \`https://dexscreener.com/solana/\${mint}\`),
       ],
       [
@@ -363,7 +362,6 @@ ALERT_SURGE_MULTIPLIER_10X=10.0
 # Affiliate Referral IDs (Monetization)
 TROJAN_REF="your_trojan_ref"
 BONKBOT_REF="your_bonkbot_ref"
-PHOTON_REF="your_photon_ref"
 MAESTRO_REF="your_maestro_ref"
 BULLX_REF="your_bullx_ref"
 

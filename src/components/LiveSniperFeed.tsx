@@ -18,7 +18,9 @@ import {
   ShieldCheck, 
   Sparkles,
   Play,
-  RotateCcw
+  RotateCcw,
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { TrackedToken } from '../types';
 
@@ -27,6 +29,9 @@ interface LiveSniperFeedProps {
   onSimulateNewMint: () => void;
   onSimulateTrade: (mint: string, multiplierBump: number) => void;
   onSelectTokenForLookup: (mint: string) => void;
+  onClearLogsAndCache: () => void;
+  onSyncRealTime: () => void;
+  isSyncing: boolean;
   solUsdPrice: number;
 }
 
@@ -35,6 +40,9 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
   onSimulateNewMint,
   onSimulateTrade,
   onSelectTokenForLookup,
+  onClearLogsAndCache,
+  onSyncRealTime,
+  isSyncing,
   solUsdPrice,
 }) => {
   const [copiedMint, setCopiedMint] = useState<string | null>(null);
@@ -61,7 +69,7 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Control Banner & Quick Simulation Tools */}
+      {/* Control Banner & Real-time Action Controls */}
       <div className="bg-gradient-to-r from-zinc-900 via-[#101423] to-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-xl">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
@@ -69,22 +77,46 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
               <span className="p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                 <Zap className="w-4 h-4" />
               </span>
-              <h2 className="text-lg font-bold text-zinc-100">Sub-Second Pump.fun Sniper Radar</h2>
+              <h2 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
+                Sub-Second Pump.fun Sniper Radar
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                  REAL-TIME SYNC
+                </span>
+              </h2>
             </div>
             <p className="text-xs text-zinc-400 max-w-2xl">
-              Listening to <code className="text-emerald-400 font-mono">6EF8...eF6P</code> instruction logs. When a new mint occurs, it is captured in under 500ms and tracked for 5x / 10x surges.
+              Tracking Program <code className="text-emerald-400 font-mono">6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P</code> on Solana mainnet. Real-time coins, bonding curve liquidity, and 5x/10x moonshot detection.
             </p>
           </div>
 
-          {/* Quick Simulation Buttons */}
+          {/* Action Buttons: Sync Real-Time Coins, Clear Logs & Cache, Simulate */}
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={onSimulateNewMint}
-              className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-950 transition active:scale-95"
+              onClick={onSyncRealTime}
+              disabled={isSyncing}
+              className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-950 transition active:scale-95 disabled:opacity-50"
             >
-              <Sparkles className="w-4 h-4" />
-              Simulate New Mint
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Syncing Solana...' : 'Synchronize Pump.fun Coins'}</span>
             </button>
+
+            <button
+              onClick={onClearLogsAndCache}
+              className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs border border-zinc-700 flex items-center gap-1.5 transition active:scale-95"
+              title="Clear all stored logs and token cache to start fresh"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span>Clear Logs &amp; Cache</span>
+            </button>
+
+            <button
+              onClick={onSimulateNewMint}
+              className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-xs border border-emerald-500/30 flex items-center gap-1.5 transition active:scale-95"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              Simulate Mint
+            </button>
+
             {tokens.length > 0 && (
               <>
                 <button
@@ -141,14 +173,37 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
       {/* Token Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filteredTokens.length === 0 ? (
-          <div className="col-span-full py-16 text-center bg-zinc-900/40 border border-zinc-800/60 rounded-2xl">
-            <div className="w-12 h-12 mx-auto rounded-full bg-zinc-800 flex items-center justify-center text-zinc-500 mb-3">
-              <Clock className="w-6 h-6 animate-pulse" />
+          <div className="col-span-full py-16 text-center bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6">
+            <div className="w-14 h-14 mx-auto rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 mb-4 border border-zinc-700/60 shadow-inner">
+              <RefreshCw className={`w-6 h-6 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
             </div>
-            <h3 className="text-sm font-semibold text-zinc-300">Listening to Pump.fun Solana Blocks...</h3>
-            <p className="text-xs text-zinc-500 mt-1 max-w-md mx-auto">
-              No new tokens match your criteria yet. Click "Simulate New Mint" above or wait for live Solana mainnet blocks.
+            <h3 className="text-base font-bold text-zinc-200">
+              {tokens.length === 0 ? 'Cache Cleared • Ready for Real-Time Pump.fun Coins' : 'No tokens match your search query'}
+            </h3>
+            <p className="text-xs text-zinc-400 mt-1 max-w-md mx-auto">
+              {tokens.length === 0
+                ? 'Click below to pull genuine active Pump.fun coins from Solana mainnet or start monitoring incoming blocks.'
+                : 'Try adjusting your filter or search criteria to view tracked tokens.'}
             </p>
+            {tokens.length === 0 && (
+              <div className="flex items-center justify-center gap-3 mt-5">
+                <button
+                  onClick={onSyncRealTime}
+                  disabled={isSyncing}
+                  className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-cyan-950 transition active:scale-95 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Synchronizing...' : 'Synchronize Real-Time Coins'}</span>
+                </button>
+                <button
+                  onClick={onSimulateNewMint}
+                  className="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-xs border border-emerald-500/30 flex items-center gap-2 transition active:scale-95"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Simulate Test Mint</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           filteredTokens.map((token) => {
@@ -310,7 +365,7 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                       ⚡ Trojan
                     </a>
                     <a
-                      href={`https://photon-sol.tinyastro.io/en/lp/${token.mint}?handle=alphasniper`}
+                      href={`https://photon-sol.tinyastro.io/en/lp/${token.mint}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-2 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-center text-[10px] font-semibold text-cyan-400 hover:text-cyan-300 transition flex items-center justify-center gap-1"

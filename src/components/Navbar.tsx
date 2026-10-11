@@ -16,7 +16,7 @@ import {
   RefreshCw 
 } from 'lucide-react';
 
-export type ActiveTab = 'feed' | 'telegram' | 'dm' | 'curve' | 'code' | 'vps';
+export type ActiveTab = 'feed' | 'logs' | 'telegram' | 'dm' | 'curve' | 'code' | 'vps';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -117,6 +117,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Activity className="w-3.5 h-3.5" />
             <span>Radar Feed</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('logs')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition ${
+              activeTab === 'logs'
+                ? 'bg-emerald-500 text-zinc-950 shadow-md font-semibold'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+            }`}
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span>Live Logs</span>
           </button>
 
           <button

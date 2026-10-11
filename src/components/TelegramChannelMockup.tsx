@@ -25,7 +25,6 @@ interface TelegramChannelMockupProps {
   affiliateRefs: {
     trojan: string;
     bonkbot: string;
-    photon: string;
     maestro: string;
     bullx: string;
   };
@@ -194,7 +193,7 @@ export const TelegramChannelMockup: React.FC<TelegramChannelMockupProps> = ({
 
               <div className="grid grid-cols-2 gap-1.5">
                 <a
-                  href={`https://photon-sol.tinyastro.io/en/lp/${sampleToken.mint}?handle=${affiliateRefs.photon}`}
+                  href={`https://photon-sol.tinyastro.io/en/lp/${sampleToken.mint}`}
                   target="_blank"
                   rel="noreferrer"
                   className="bg-[#2b3a4a] hover:bg-[#344659] text-[#64b5f6] text-center font-semibold py-2 px-3 rounded-xl transition flex items-center justify-center gap-1 text-[11px]"
@@ -286,7 +285,7 @@ export const TelegramChannelMockup: React.FC<TelegramChannelMockupProps> = ({
                 ⚡ Trojan Sniper
               </a>
               <a
-                href={`https://photon-sol.tinyastro.io/en/lp/${sampleToken.mint}?handle=${affiliateRefs.photon}`}
+                href={`https://photon-sol.tinyastro.io/en/lp/${sampleToken.mint}`}
                 target="_blank"
                 rel="noreferrer"
                 className="bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/40 text-purple-200 text-center font-bold py-2 px-3 rounded-xl transition text-[11px]"

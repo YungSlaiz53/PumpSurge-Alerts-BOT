@@ -121,11 +121,22 @@ export interface BotConfig {
   affiliateRefs: {
     trojan: string;
     bonkbot: string;
-    photon: string;
     maestro: string;
     bullx: string;
   };
   solUsdPrice: number;
+}
+
+/**
+ * Real-time event log entry for live terminal display & synchronization
+ */
+export interface LogEntry {
+  id: string;
+  timestamp: number;
+  level: 'info' | 'warn' | 'success' | 'alert' | 'error';
+  tag: string;
+  message: string;
+  data?: any;
 }
 
 /**
