@@ -73,6 +73,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Alerts Dispatched: <strong className="text-cyan-400">{alertsCount}</strong></span>
           </div>
 
+          <a
+            href="https://t.me/PumpSurgeAlerts"
+            target="_blank"
+            rel="noreferrer"
+            className="px-2.5 py-0.5 rounded text-[11px] font-semibold bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 flex items-center gap-1 transition"
+          >
+            <span>📢 @PumpSurgeAlerts</span>
+          </a>
+
           <button
             onClick={() => setIsLiveWs(!isLiveWs)}
             className={`px-2.5 py-0.5 rounded text-[11px] font-medium border flex items-center gap-1.5 transition ${

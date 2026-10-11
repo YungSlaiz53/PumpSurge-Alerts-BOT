@@ -98,7 +98,7 @@ export const TelegramDMSimulator: React.FC<TelegramDMSimulatorProps> = ({
 <b>Live Status:</b>
 🟢 Status: <b>Online & Monitoring</b>
 📡 Tracking Program: <code>6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P</code>
-📢 Official Alerts: <a href="#">@PumpFunAlphaAlerts</a>
+📢 Official Alerts: <a href="https://t.me/PumpSurgeAlerts">@PumpSurgeAlerts</a>
 🎯 Active Tracked Tokens: <b>${tokens.length || 12}</b>
 
 <i>Tap any button below to configure your preferences or lookup a token:</i>
@@ -113,7 +113,7 @@ export const TelegramDMSimulator: React.FC<TelegramDMSimulatorProps> = ({
           textHtml: html,
           buttons: [
             [
-              { text: '📢 Join Alert Channel', action: 'url', url: 'https://t.me' },
+              { text: '📢 Join Alert Channel', action: 'url', url: 'https://t.me/PumpSurgeAlerts' },
               { text: '⚙️ Notification Settings', action: 'cmd:/settings' },
             ],
             [
@@ -122,7 +122,7 @@ export const TelegramDMSimulator: React.FC<TelegramDMSimulatorProps> = ({
             ],
             [
               { text: '⚡ Fast Sniper (Trojan)', action: 'url', url: 'https://t.me/solana_trojanbot' },
-              { text: '⚡ Fast Sniper (BonkBot)', action: 'url', url: 'https://t.me/bonkbot_bot' },
+              { text: '🤖 BonkBot', action: 'url', url: 'https://t.me/bonkbot_bot' },
             ],
           ],
         },
@@ -165,26 +165,41 @@ export const TelegramDMSimulator: React.FC<TelegramDMSimulatorProps> = ({
               { text: '🤖 BonkBot', action: 'url', url: `https://t.me/bonkbot_bot?start=ref_alphasniper_ca_${mint}` },
             ],
             [
-              { text: '🚀 Photon Web', action: 'url', url: `https://photon-sol.tinyastro.io/en/lp/${mint}?handle=alphasniper` },
+              { text: '🚀 Photon Web', action: 'url', url: `https://photon-sol.tinyastro.io/en/lp/${mint}` },
               { text: '📊 DexScreener', action: 'url', url: `https://dexscreener.com/solana/${mint}` },
             ],
           ],
         },
       ]);
     } else if (lower.startsWith('/runners')) {
-      const runnersHtml = `
-🔥 <b>Top Surging Tokens on Pump.fun Right Now:</b>
+      // Find historical and active runners from tokens
+      const activeHigh = tokens.filter(t => t.highestMultiplier >= 2.0);
+      const defaultPrevious = [
+        { name: 'Zhunt', symbol: 'ZNT', mult: 12.1, time: '38.2s', mcap: '$61,000 (338.8 SOL)', mint: '8YeBTPV58fH6tnzUAihMK1LixsGc1jsN7DAyBoiRpump' },
+        { name: 'Neural Doge Solana', symbol: 'NDOGE', mult: 10.53, time: '32.4s', mcap: '$53,100 (295.0 SOL)', mint: '9wQz12q8nL7pU9qK4mN8qP3dF6hC2eA18xK1M7gQpX2' },
+        { name: 'Pepe AI Turbo', symbol: 'PEPETURBO', mult: 5.42, time: '11.2s', mcap: '$27,360 (152.0 SOL)', mint: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU' },
+      ];
 
-1. <b>Solana Doge Alpha</b> ($SDOGE)
-   🚀 Multiplier: <b>5.18x</b> in 18.4s
-   💰 Market Cap: <b>$26,100</b> (145.0 SOL)
-   📝 Mint: <code>8xK1M7gQpX2bJ9...</code>
+      let runnersHtml = `🏆 <b>PREVIOUS 5X / 10X RUNNERS HALL OF FAME:</b>\n`;
+      runnersHtml += `📢 Broadcasted via <a href="https://t.me/PumpSurgeAlerts">@PumpSurgeAlerts</a>\n\n`;
 
-2. <b>Cat in a Trenchcoat</b> ($CIT)
-   🚀 Multiplier: <b>10.42x</b> in 42.1s
-   💰 Market Cap: <b>$54,200</b> (301.1 SOL)
-   📝 Mint: <code>4mN8qP3dF6hC2e...</code>
-      `;
+      defaultPrevious.forEach((item, idx) => {
+        const icon = item.mult >= 10 ? '💥' : '🚀';
+        runnersHtml += `${idx + 1}. ${icon} <b>${item.name}</b> (<code>$${item.symbol}</code>)\n`;
+        runnersHtml += `   🔥 Peak Multiplier: <b>${item.mult.toFixed(2)}x</b> in ${item.time}\n`;
+        runnersHtml += `   💰 Market Cap: <b>${item.mcap}</b>\n`;
+        runnersHtml += `   📋 Mint: <code>${item.mint}</code>\n\n`;
+      });
+
+      if (activeHigh.length > 0) {
+        runnersHtml += `⚡ <b>Current Active Session Surges:</b>\n`;
+        activeHigh.slice(0, 3).forEach((token, idx) => {
+          runnersHtml += `• <b>${token.name}</b> ($${token.symbol}): <b>${token.highestMultiplier.toFixed(2)}x</b> | <code>${token.mint.slice(0, 12)}...</code>\n`;
+        });
+      }
+
+      runnersHtml += `\n<i>Tap any contract address above to copy into your trading bot!</i>`;
+
       setMessages(prev => [
         ...prev,
         {
@@ -192,6 +207,15 @@ export const TelegramDMSimulator: React.FC<TelegramDMSimulatorProps> = ({
           sender: 'bot',
           timestamp: time,
           textHtml: runnersHtml,
+          buttons: [
+            [
+              { text: '📢 Join @PumpSurgeAlerts', action: 'url', url: 'https://t.me/PumpSurgeAlerts' },
+              { text: '⚡ Fast Trojan Sniper', action: 'url', url: 'https://t.me/solana_trojanbot' },
+            ],
+            [
+              { text: '⬅️ Back to Menu', action: 'cmd:/start' },
+            ]
+          ]
         },
       ]);
     } else {

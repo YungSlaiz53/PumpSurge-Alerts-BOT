@@ -22,12 +22,12 @@ function loadConfiguration(): BotConfig {
   }
 
   if (!telegramChannelId) {
-    console.warn('⚠️ [CONFIG] TELEGRAM_CHANNEL_ID is not configured. Falling back to @PumpFunAlphaAlerts.');
+    console.warn('⚠️ [CONFIG] TELEGRAM_CHANNEL_ID is not configured. Falling back to @PumpSurgeAlerts.');
   }
 
   return {
     telegramBotToken: telegramBotToken || 'MOCK_TOKEN',
-    telegramChannelId: telegramChannelId || '@PumpFunAlphaAlerts',
+    telegramChannelId: telegramChannelId || '@PumpSurgeAlerts',
     telegramAdminUserId: process.env.TELEGRAM_ADMIN_USER_ID,
     solanaRpcUrl,
     solanaWssUrl,

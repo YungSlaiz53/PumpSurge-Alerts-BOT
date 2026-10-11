@@ -12,8 +12,10 @@ import { BondingCurveCalculator } from './components/BondingCurveCalculator';
 import { CodeExplorer } from './components/CodeExplorer';
 import { DeploymentDocs } from './components/DeploymentDocs';
 import { TerminalLogs } from './components/TerminalLogs';
+import { PreviousRunnersTicker } from './components/PreviousRunnersTicker';
 import { TrackedToken, LogEntry } from './types';
 import { PumpSyncService } from './services/pumpSyncService';
+import { Volume2, VolumeX, Sparkles, Send } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('feed');
@@ -21,6 +23,7 @@ export default function App() {
   const [latencyMs, setLatencyMs] = useState(128);
   const [blockSlot, setBlockSlot] = useState(455683050);
   const [tokens, setTokens] = useState<TrackedToken[]>([]);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       id: 'init-1',
@@ -36,10 +39,47 @@ export default function App() {
       tag: 'SOLANA',
       message: 'Solana RPC cluster connected: Commitment [processed]. Target: 6EF8...eF6P.',
     },
+    {
+      id: 'init-3',
+      timestamp: Date.now() - 500,
+      level: 'info',
+      tag: 'TELEGRAM',
+      message: 'Channel broadcaster synchronized to: https://t.me/PumpSurgeAlerts (@PumpSurgeAlerts).',
+    },
   ]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [alertsCount, setAlertsCount] = useState(0);
   const solUsdPrice = 180.0;
+
+  // Fun synthesized retro Web Audio sound effects for 5x & 10x surges
+  const playSurgeAudio = useCallback(
+    (is10x: boolean) => {
+      if (!soundEnabled) return;
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = is10x ? 'triangle' : 'sine';
+        const now = ctx.currentTime;
+        osc.frequency.setValueAtTime(is10x ? 440 : 330, now);
+        osc.frequency.exponentialRampToValueAtTime(is10x ? 1760 : 880, now + 0.35);
+
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } catch {
+        // AudioContext might be restricted until user gesture
+      }
+    },
+    [soundEnabled]
+  );
 
   // Real-time synchronization function
   const handleSyncRealTime = useCallback(async () => {
@@ -124,7 +164,7 @@ export default function App() {
       timestamp: Date.now(),
       level: 'info',
       tag: 'NEW MINT',
-      message: `Detected new mint: ${chosenName} ($${chosenSymbol}) | CA: ${mint.slice(0, 8)}... | Initial LP: 30 SOL`,
+      message: `Detected new mint: ${chosenName} ($${chosenSymbol}) | CA: ${mint.slice(0, 8)}... | Initial LP: 30 SOL | Alert dispatched to @PumpSurgeAlerts`,
     };
     setLogs((prev) => [mintLog, ...prev]);
   };
@@ -146,21 +186,23 @@ export default function App() {
         const is10xNow = newMult >= 10.0;
 
         if (is10xNow && !was10x) {
+          playSurgeAudio(true);
           const logEntry: LogEntry = {
             id: `surge-10x-${now}`,
             timestamp: now,
             level: 'alert',
             tag: '10X MOONSHOT',
-            message: `💥💥 10X Surge: ${token.name} ($${token.symbol}) crossed ${newMult.toFixed(1)}x ($${Math.round(newCapSol * solUsdPrice).toLocaleString()})!`,
+            message: `💥💥 10X Surge: ${token.name} ($${token.symbol}) crossed ${newMult.toFixed(1)}x ($${Math.round(newCapSol * solUsdPrice).toLocaleString()})! Reply sent to @PumpSurgeAlerts`,
           };
           setLogs((p) => [logEntry, ...p]);
         } else if (is5xNow && !was5x) {
+          playSurgeAudio(false);
           const logEntry: LogEntry = {
             id: `surge-5x-${now}`,
             timestamp: now,
             level: 'alert',
             tag: '5X SURGE',
-            message: `🚀🚀 5X Multiplier: ${token.name} ($${token.symbol}) reached ${newMult.toFixed(1)}x in velocity window!`,
+            message: `🚀🚀 5X Multiplier: ${token.name} ($${token.symbol}) reached ${newMult.toFixed(1)}x in velocity window! Reply sent to @PumpSurgeAlerts`,
           };
           setLogs((p) => [logEntry, ...p]);
         }
@@ -210,6 +252,14 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {activeTab === 'feed' && (
           <div className="space-y-6">
+            {/* Previous 5x / 10x Runners Hall of Fame */}
+            <PreviousRunnersTicker
+              liveTokens={tokens}
+              onSelectToken={() => setActiveTab('dm')}
+              solUsdPrice={solUsdPrice}
+            />
+
+            {/* Live Sniper Radar Feed */}
             <LiveSniperFeed
               tokens={tokens}
               onSimulateNewMint={handleSimulateNewMint}
@@ -245,7 +295,7 @@ export default function App() {
         {activeTab === 'telegram' && (
           <TelegramChannelMockup
             tokens={tokens}
-            channelName="@PumpFunAlphaAlerts"
+            channelName="@PumpSurgeAlerts"
             affiliateRefs={affiliateRefs}
             solUsdPrice={solUsdPrice}
           />
@@ -270,17 +320,31 @@ export default function App() {
       {/* Institutional Web3 Terminal Footer */}
       <footer className="border-t border-zinc-900 bg-[#07080c] py-6 px-4 text-xs text-zinc-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span className="font-semibold text-zinc-400">PumpSniper Core Engine</span>
             <span>•</span>
-            <span>Solana Program: <code className="text-zinc-400 font-mono">6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P</code></span>
+            <a
+              href="https://t.me/PumpSurgeAlerts"
+              target="_blank"
+              rel="noreferrer"
+              className="text-cyan-400 hover:underline flex items-center gap-1 font-semibold"
+            >
+              <Send className="w-3 h-3" />
+              <span>@PumpSurgeAlerts</span>
+            </a>
           </div>
 
           <div className="flex items-center gap-4 text-[11px]">
-            <span>100% Free Forever</span>
+            <button
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className="flex items-center gap-1 text-zinc-400 hover:text-white transition px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800"
+            >
+              {soundEnabled ? <Volume2 className="w-3 h-3 text-emerald-400" /> : <VolumeX className="w-3 h-3 text-zinc-500" />}
+              <span>Surge Audio: {soundEnabled ? 'ON' : 'OFF'}</span>
+            </button>
             <span>•</span>
-            <span>Direct Photon Routing (No Referral)</span>
+            <span>Direct Photon Routing</span>
             <span>•</span>
             <span>Real-time Solana Mainnet Data</span>
           </div>

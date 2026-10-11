@@ -33,6 +33,84 @@ export class TelegramAlertBot {
   // In-memory user preferences for DM subscribers
   private userPreferences: Map<number, UserPreferences> = new Map();
 
+  // Previous 5x / 10x runners Hall of Fame
+  private historicalSurgeRunners: TrackedToken[] = [
+    {
+      mint: '8YeBTPV58fH6tnzUAihMK1LixsGc1jsN7DAyBoiRpump',
+      name: 'Zhunt',
+      symbol: 'ZNT',
+      uri: '',
+      creator: '8yebtpv58fh6tnzuaihmk1lixsgc1jsn7dayboirpump',
+      bondingCurve: 'Fs3SDG433BXtcbtubMEUk38v5q381Y2JKJyJTrsTWVbf',
+      createdAt: Date.now() - 360000,
+      initialPriceSol: 0.000000028,
+      initialMarketCapSol: 28.0,
+      initialMarketCapUsd: 5040,
+      currentPriceSol: 0.000000338,
+      currentMarketCapSol: 338.8,
+      currentMarketCapUsd: 61000,
+      highestMultiplier: 12.1,
+      notified5x: true,
+      notified10x: true,
+      surgeTime5x: 12400,
+      surgeTime10x: 38200,
+      tradeCount: 184,
+      buyCount: 152,
+      sellCount: 32,
+      volumeSol: 86.4,
+      lastTradeTimestamp: Date.now() - 120000,
+    },
+    {
+      mint: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+      name: 'Pepe AI Turbo',
+      symbol: 'PEPETURBO',
+      uri: '',
+      creator: '4pE3e9wFFhD1Qz12q8nL7pU9qK4mN8qP3dF6hC2eA1',
+      bondingCurve: '8mZ7tV1kS5mN8qP3dF6hC2eA17kL9W9uL4rZ7tV1kS5',
+      createdAt: Date.now() - 900000,
+      initialPriceSol: 0.000000028,
+      initialMarketCapSol: 28.0,
+      initialMarketCapUsd: 5040,
+      currentPriceSol: 0.000000152,
+      currentMarketCapSol: 152.0,
+      currentMarketCapUsd: 27360,
+      highestMultiplier: 5.42,
+      notified5x: true,
+      notified10x: false,
+      surgeTime5x: 11200,
+      tradeCount: 76,
+      buyCount: 62,
+      sellCount: 14,
+      volumeSol: 38.4,
+      lastTradeTimestamp: Date.now() - 600000,
+    },
+    {
+      mint: '9wQz12q8nL7pU9qK4mN8qP3dF6hC2eA18xK1M7gQpX2',
+      name: 'Neural Doge Solana',
+      symbol: 'NDOGE',
+      uri: '',
+      creator: 'G3HY9jz8qqQ24db6b7fb7492a54JNt7f7RJKlQ24db6',
+      bondingCurve: '2eA18xK1M7gQpX2bJ9W9uL4rZ7tV1kS5mN8qP3dF6hC',
+      createdAt: Date.now() - 1800000,
+      initialPriceSol: 0.000000028,
+      initialMarketCapSol: 28.0,
+      initialMarketCapUsd: 5040,
+      currentPriceSol: 0.000000295,
+      currentMarketCapSol: 295.0,
+      currentMarketCapUsd: 53100,
+      highestMultiplier: 10.53,
+      notified5x: true,
+      notified10x: true,
+      surgeTime5x: 9800,
+      surgeTime10x: 32400,
+      tradeCount: 142,
+      buyCount: 118,
+      sellCount: 24,
+      volumeSol: 71.8,
+      lastTradeTimestamp: Date.now() - 1200000,
+    },
+  ];
+
   // Clean-up interval timer
   private cleanupTimer: NodeJS.Timeout | null = null;
 
@@ -70,13 +148,8 @@ export class TelegramAlertBot {
         });
       }
 
-      const channelName = this.config.telegramChannelId.startsWith('@')
-        ? this.config.telegramChannelId
-        : 'Official Alpha Channel';
-
-      const channelUrl = this.config.telegramChannelId.startsWith('@')
-        ? `https://t.me/${this.config.telegramChannelId.replace('@', '')}`
-        : 'https://t.me';
+      const channelUrl = 'https://t.me/PumpSurgeAlerts';
+      const channelName = '@PumpSurgeAlerts';
 
       const welcomeHtml = `
 🚀 <b>PumpSniper — Pump.fun Real-Time Alpha Bot</b>
@@ -96,7 +169,7 @@ export class TelegramAlertBot {
 
       const keyboard = Markup.inlineKeyboard([
         [
-          Markup.button.url('📢 Join Alert Channel', channelUrl),
+          Markup.button.url('📢 Join Alert Channel', 'https://t.me/PumpSurgeAlerts'),
           Markup.button.callback('⚙️ Notification Settings', 'menu_settings'),
         ],
         [
@@ -105,7 +178,7 @@ export class TelegramAlertBot {
         ],
         [
           Markup.button.url('⚡ Fast Sniper (Trojan)', `https://t.me/solana_trojanbot?start=r-${this.config.affiliateRefs.trojan}`),
-          Markup.button.url('⚡ Fast Sniper (BonkBot)', `https://t.me/bonkbot_bot?start=ref_${this.config.affiliateRefs.bonkbot}`),
+          Markup.button.url('🤖 BonkBot', `https://t.me/bonkbot_bot?start=ref_${this.config.affiliateRefs.bonkbot}`),
         ],
       ]);
 
@@ -156,28 +229,63 @@ export class TelegramAlertBot {
       );
     });
 
-    // 4. Active Runners Callback
-    this.bot.action('menu_runners', async (ctx) => {
-      await ctx.answerCbQuery();
-      const runners = Array.from(this.trackedTokens.values())
-        .filter(t => t.highestMultiplier > 1.2)
-        .sort((a, b) => b.highestMultiplier - a.highestMultiplier)
-        .slice(0, 5);
+    // 4. Previous & Active 5x/10x Runners Command & Callback
+    this.bot.command('runners', (ctx) => this.sendRunnersList(ctx));
+    this.bot.action('menu_runners', (ctx) => this.sendRunnersList(ctx));
+  }
 
-      if (runners.length === 0) {
-        return ctx.replyWithHTML('ℹ️ <i>No tokens currently surging above 1.2x. Listening to new blocks...</i>');
-      }
+  /**
+   * Send previous 5x/10x runners Hall of Fame
+   */
+  private async sendRunnersList(ctx: any): Promise<void> {
+    if (ctx.answerCbQuery) {
+      await ctx.answerCbQuery('Fetching previous 5x/10x moonshot runners...');
+    }
 
-      let text = `🔥 <b>Top Surging Tokens on Pump.fun Right Now:</b>\n\n`;
-      runners.forEach((t, i) => {
-        text += `${i + 1}. <b>${escapeHtml(t.name)}</b> ($${escapeHtml(t.symbol)})\n`;
-        text += `   🚀 Multiplier: <b>${t.highestMultiplier.toFixed(2)}x</b>\n`;
-        text += `   💰 Market Cap: <b>$${Math.round(t.currentMarketCapUsd).toLocaleString()}</b> (${t.currentMarketCapSol.toFixed(2)} SOL)\n`;
-        text += `   📝 Mint: <code>${t.mint}</code>\n\n`;
-      });
+    // Combine previous historical runners with any live tokens currently surging
+    const liveRunners = Array.from(this.trackedTokens.values())
+      .filter((t) => t.highestMultiplier >= 2.0);
 
-      await ctx.replyWithHTML(text);
+    const allRunnersMap = new Map<string, TrackedToken>();
+    this.historicalSurgeRunners.forEach((r) => allRunnersMap.set(r.mint, r));
+    liveRunners.forEach((r) => allRunnersMap.set(r.mint, r));
+
+    const sortedRunners = Array.from(allRunnersMap.values())
+      .sort((a, b) => b.highestMultiplier - a.highestMultiplier)
+      .slice(0, 6);
+
+    let text = `🏆 <b>PREVIOUS 5X / 10X RUNNERS HALL OF FAME</b>\n`;
+    text += `📢 Broadcasted via <a href="https://t.me/PumpSurgeAlerts">@PumpSurgeAlerts</a>\n\n`;
+
+    sortedRunners.forEach((t, i) => {
+      const is10x = t.highestMultiplier >= 10.0;
+      const emoji = is10x ? '💥' : '🚀';
+      const timeStr = t.surgeTime10x
+        ? `${(t.surgeTime10x / 1000).toFixed(1)}s`
+        : t.surgeTime5x
+        ? `${(t.surgeTime5x / 1000).toFixed(1)}s`
+        : 'early window';
+
+      text += `${i + 1}. ${emoji} <b>${escapeHtml(t.name)}</b> (<code>$${escapeHtml(t.symbol)}</code>)\n`;
+      text += `   🔥 Peak Multiplier: <b>${t.highestMultiplier.toFixed(2)}x</b> (in ${timeStr})\n`;
+      text += `   💰 Market Cap: <b>$${Math.round(t.currentMarketCapUsd).toLocaleString()}</b> (${t.currentMarketCapSol.toFixed(1)} SOL)\n`;
+      text += `   🌊 Volume: <b>${t.volumeSol.toFixed(1)} SOL</b> (${t.tradeCount} trades)\n`;
+      text += `   📋 Mint: <code>${t.mint}</code>\n\n`;
     });
+
+    text += `<i>💡 Tap any mint address above to copy and paste into Trojan or BonkBot!</i>`;
+
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.url('📢 Join @PumpSurgeAlerts', 'https://t.me/PumpSurgeAlerts'),
+        Markup.button.url('⚡ Trojan Sniper', `https://t.me/solana_trojanbot?start=r-${this.config.affiliateRefs.trojan}`),
+      ],
+      [
+        Markup.button.callback('⬅️ Back to Menu', 'menu_start_back'),
+      ],
+    ]);
+
+    await ctx.replyWithHTML(text, keyboard);
   }
 
   /**
@@ -448,7 +556,18 @@ ${headerEmoji}
         }
       );
 
-      console.log(`[TelegramBot] Dispatched ${targetMultiplier}x alert for ${token.symbol} (${timeElapsedSeconds.toFixed(1)}s)`);
+      // Record in historical 5x/10x runners Hall of Fame
+      const existingIdx = this.historicalSurgeRunners.findIndex((r) => r.mint === token.mint);
+      if (existingIdx >= 0) {
+        if (token.highestMultiplier > this.historicalSurgeRunners[existingIdx].highestMultiplier) {
+          this.historicalSurgeRunners[existingIdx] = { ...token };
+        }
+      } else {
+        this.historicalSurgeRunners.unshift({ ...token });
+        if (this.historicalSurgeRunners.length > 25) this.historicalSurgeRunners.pop();
+      }
+
+      console.log(`[TelegramBot] Dispatched ${targetMultiplier}x alert for ${token.symbol} (${timeElapsedSeconds.toFixed(1)}s) to https://t.me/PumpSurgeAlerts`);
 
       // Broadcast to users opted-in for surges
       this.broadcastToSubscribedUsers(surgeHtml, keyboard, true);

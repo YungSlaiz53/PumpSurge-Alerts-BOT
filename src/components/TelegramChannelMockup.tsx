@@ -104,19 +104,24 @@ export const TelegramChannelMockup: React.FC<TelegramChannelMockupProps> = ({
             </div>
             <div>
               <div className="font-bold text-white text-sm flex items-center gap-1.5">
-                PumpSniper Alpha Channel
+                PumpSurge Alerts
                 <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.2 rounded font-medium">Channel</span>
               </div>
               <div className="text-[11px] text-[#7f91a4]">
-                14,289 subscribers • Sub-second Pump.fun alerts
+                14,289 subscribers • Sub-second Pump.fun alerts • @PumpSurgeAlerts
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[#64b5f6] hover:underline cursor-pointer">
-              Join Channel
-            </span>
+            <a
+              href="https://t.me/PumpSurgeAlerts"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-[#64b5f6] hover:underline font-semibold flex items-center gap-1 bg-[#2b3a4a] px-3 py-1 rounded-lg"
+            >
+              Join @PumpSurgeAlerts
+            </a>
           </div>
         </div>
 

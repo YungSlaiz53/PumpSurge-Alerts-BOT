@@ -31,7 +31,7 @@ function loadConfiguration(): BotConfig {
 
   return {
     telegramBotToken: telegramBotToken || 'YOUR_BOT_TOKEN',
-    telegramChannelId: telegramChannelId || '@PumpFunAlphaAlerts',
+    telegramChannelId: telegramChannelId || '@PumpSurgeAlerts',
     telegramAdminUserId: process.env.TELEGRAM_ADMIN_USER_ID,
     solanaRpcUrl,
     solanaWssUrl,
@@ -346,7 +346,7 @@ export interface TrackedToken {
     description: 'Environment variables template with Telegram bot token, channel ID, Solana RPC URLs, and affiliate referral IDs.',
     content: `# Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN="1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ123456789"
-TELEGRAM_CHANNEL_ID="@PumpFunAlphaAlerts"
+TELEGRAM_CHANNEL_ID="@PumpSurgeAlerts"
 
 # Solana RPC & WebSocket Configuration
 SOLANA_RPC_URL="https://mainnet.helius-rpc.com/?api-key=YOUR_KEY"
