@@ -3,40 +3,42 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Navbar, ActiveTab } from './components/Navbar';
 import { LiveSniperFeed } from './components/LiveSniperFeed';
 import { PreviousRunnersTicker } from './components/PreviousRunnersTicker';
 import { TerminalLogs } from './components/TerminalLogs';
-import { WatchlistPanel } from './components/WatchlistPanel';
+import { DumpedCoinsList } from './components/DumpedCoinsList';
+import { AdminDashboard } from './components/AdminDashboard';
 import { BondingCurveCalculator } from './components/BondingCurveCalculator';
 import { RenderDeployDocs } from './components/RenderDeployDocs';
 import { AuthModal } from './components/AuthModal';
 import { NotificationCenter, AppNotification } from './components/NotificationCenter';
 import { TrackedToken, LogEntry } from './types';
 import { PumpSyncService } from './services/pumpSyncService';
-import { AuthService, AuthUser } from './services/authService';
-import { Volume2, VolumeX, Bell, Trophy, Star, Server, Sparkles, Activity } from 'lucide-react';
+import { AuthService, AuthUser, ADMIN_USERNAME } from './services/authService';
+import { SiteConfigService, SiteConfig } from './services/siteConfigService';
+import { AlertTriangle, Bell, Info, ShieldAlert, CheckCircle2, Trophy } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('feed');
-  const [isLiveWs, setIsLiveWs] = useState(true);
   const [latencyMs, setLatencyMs] = useState(115);
   const [blockSlot, setBlockSlot] = useState(455683100);
   const [tokens, setTokens] = useState<TrackedToken[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   
-  // User Authentication & Watchlist State
+  // Site Customizer State (Admin controlled)
+  const [siteConfig, setSiteConfig] = useState<SiteConfig>(() => SiteConfigService.getConfig());
+
+  // 15-Second Auto-Synchronize State
+  const [isAutoSyncActive, setIsAutoSyncActive] = useState(true);
+  const [syncCountdown, setSyncCountdown] = useState(15);
+  const [timeUntilMidnight, setTimeUntilMidnight] = useState('');
+
+  // User Authentication State
+  // Requirement 5: "Now make the first thing you see when you open the site is to register/login"
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => AuthService.getCurrentUser());
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [watchlistMints, setWatchlistMints] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('pumpsurge_watchlist');
-      return saved ? JSON.parse(saved) : ['8YeBTPV58fH6tnzUAihMK1LixsGc1jsN7DAyBoiRpump'];
-    } catch {
-      return [];
-    }
-  });
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => !AuthService.getCurrentUser());
 
   // In-App Notification Center State
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -65,6 +67,19 @@ export default function App() {
       marketCapUsd: 27360,
       timestamp: Date.now() - 900000,
     },
+    {
+      id: 'notif-seed-3',
+      type: 'coin_dumping',
+      title: '⚠️ Warning Coin Dumping',
+      message: 'SolDoge Rug ($SOLDOGE) collapsed to 1.84x (below 3X threshold from 4.6x peak)!',
+      mint: 'DUMP777V58fH6tnzUAihMK1LixsGc1jsN7DAyBoiRpump',
+      name: 'SolDoge Rug',
+      symbol: 'SOLDOGE',
+      multiplier: 1.84,
+      marketCapUsd: 9200,
+      timestamp: Date.now() - 120000,
+      dropPercent: 60,
+    },
   ]);
 
   // Real-time Event Logs Stream
@@ -74,134 +89,374 @@ export default function App() {
       timestamp: Date.now() - 2000,
       level: 'info',
       tag: 'SYSTEM',
-      message: 'PumpSurge App Engine v2.0 initialized. Live Database Connected.',
+      message: 'PumpSurge App Engine v2.1 initialized. Live Database Connected.',
     },
     {
       id: 'init-2',
       timestamp: Date.now() - 1000,
       level: 'success',
       tag: 'SOLANA',
-      message: 'Solana RPC cluster connected: Commitment [processed]. Tracking: 6EF8...eF6P.',
+      message: 'Solana RPC cluster connected: Commitment [processed]. 15s price synchronizer active.',
+    },
+    {
+      id: 'init-3',
+      timestamp: Date.now() - 500,
+      level: 'alert',
+      tag: 'WARNING COIN DUMPING',
+      message: '⚠️ Below 3X Dumping Sentinel online: Active warnings on sudden drawdowns.',
     },
   ]);
 
   const [isSyncing, setIsSyncing] = useState(false);
-  const [alertsCount, setAlertsCount] = useState(2);
+  const [alertsCount, setAlertsCount] = useState(3);
   const solUsdPrice = 180.0;
+  const isSyncingRef = useRef(false);
 
-  // Persist watchlist changes
+  // Listen for Site Config Updates
   useEffect(() => {
-    localStorage.setItem('pumpsurge_watchlist', JSON.stringify(watchlistMints));
-  }, [watchlistMints]);
+    const handleConfigChange = (e: any) => {
+      if (e.detail) {
+        setSiteConfig(e.detail);
+      }
+    };
+    window.addEventListener('site_config_updated', handleConfigChange);
+    return () => window.removeEventListener('site_config_updated', handleConfigChange);
+  }, []);
 
-  const handleToggleWatchlist = (mint: string) => {
-    setWatchlistMints((prev) => {
-      const exists = prev.includes(mint);
-      const next = exists ? prev.filter((m) => m !== mint) : [...prev, mint];
-      const actionLog: LogEntry = {
-        id: `watchlist-${Date.now()}`,
-        timestamp: Date.now(),
-        level: 'info',
-        tag: 'DATABASE',
-        message: `${exists ? 'Removed' : 'Added'} token ${mint.slice(0, 8)}... to personal watchlist.`,
-      };
-      setLogs((l) => [actionLog, ...l]);
-      return next;
-    });
-  };
-
-  // Fun synthesized retro Web Audio sound effects for 5x & 10x surges
+  // Web Audio Synth for notifications (5x, 10x, high buys, new listing, and dumping alarm)
   const playSurgeAudio = useCallback(
-    (is10x: boolean) => {
+    (type: '5x' | '10x' | 'high_buys' | 'listing' | 'dumping') => {
       if (!soundEnabled) return;
       try {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        if (!AudioCtx) return;
-        const ctx = new AudioCtx();
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContextClass) return;
+        const ctx = new AudioContextClass();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
 
-        osc.type = is10x ? 'triangle' : 'sine';
         const now = ctx.currentTime;
-        osc.frequency.setValueAtTime(is10x ? 440 : 330, now);
-        osc.frequency.exponentialRampToValueAtTime(is10x ? 1760 : 880, now + 0.35);
-
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.35);
+        if (type === 'dumping') {
+          // Classic down-pitch hazard siren for coin dumping
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(880, now);
+          osc.frequency.linearRampToValueAtTime(280, now + 0.38);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.38);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.38);
+        } else if (type === '10x') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.exponentialRampToValueAtTime(1760, now + 0.35);
+          gain.gain.setValueAtTime(0.18, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        } else if (type === '5x') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(330, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.3);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.3);
+        } else if (type === 'high_buys') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(520, now);
+          osc.frequency.exponentialRampToValueAtTime(780, now + 0.2);
+          gain.gain.setValueAtTime(0.1, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.2);
+        } else {
+          // New listing chirp
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587, now);
+          osc.frequency.exponentialRampToValueAtTime(1174, now + 0.18);
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.18);
+        }
       } catch {
-        // Audio context may require user interaction
+        // Audio interaction
       }
     },
     [soundEnabled]
   );
 
-  // Real-time synchronization function
-  const handleSyncRealTime = useCallback(async () => {
+  // Real-time synchronization function (called on mount and every 15s)
+  const handleSyncRealTime = useCallback(async (_isManual = false) => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
     setIsSyncing(true);
+
     try {
       const result = await PumpSyncService.fetchRealTimePumpCoins(solUsdPrice);
+
+      if (result.resetExecuted) {
+        setLogs(result.newLogs);
+      } else {
+        setLogs((prev) => [...result.newLogs, ...prev].slice(0, 300));
+      }
+
       if (result.tokens.length > 0) {
         setTokens(result.tokens);
       }
-      setLogs((prev) => [...result.newLogs, ...prev].slice(0, 300));
-    } catch (err: any) {
-      const errLog = PumpSyncService.createLog('error', 'SYNC ERROR', err.message || 'Failed to fetch live coins');
-      setLogs((prev) => [errLog, ...prev]);
+
+      // Check for newly listed coins in this 15-second cycle
+      if (result.newlyListedTokens.length > 0) {
+        result.newlyListedTokens.forEach((token) => {
+          const newNotif: AppNotification = {
+            id: `notif-new-${Date.now()}-${token.mint.slice(0, 4)}`,
+            type: 'new_listing',
+            title: '✨ New Coin Listed on Pump.fun!',
+            message: `${token.name} ($${token.symbol}) detected in current 15s cycle!`,
+            mint: token.mint,
+            name: token.name,
+            symbol: token.symbol,
+            multiplier: 1.0,
+            marketCapUsd: token.currentMarketCapUsd,
+            timestamp: Date.now(),
+          };
+          setNotifications((prev) => [newNotif, ...prev]);
+
+          AuthService.sendDesktopNotification(
+            '✨ New Coin Listed on Pump.fun!',
+            `${token.name} ($${token.symbol}) just minted on Solana!`
+          );
+        });
+
+        playSurgeAudio('listing');
+      }
+
+      // Check for High Buys coins in this 15-second cycle
+      if (result.highBuysTokens.length > 0) {
+        result.highBuysTokens.forEach((token) => {
+          const newNotif: AppNotification = {
+            id: `notif-hb-${Date.now()}-${token.mint.slice(0, 4)}`,
+            type: 'high_buys',
+            title: '🔥 High Buys Velocity Detected!',
+            message: `${token.name} ($${token.symbol}) shooting up with ${token.buyVelocity}% buy pressure!`,
+            mint: token.mint,
+            name: token.name,
+            symbol: token.symbol,
+            multiplier: token.highestMultiplier,
+            marketCapUsd: token.currentMarketCapUsd,
+            timestamp: Date.now(),
+            buyVelocity: token.buyVelocity,
+          };
+          setNotifications((prev) => [newNotif, ...prev]);
+
+          AuthService.sendDesktopNotification(
+            '🔥 High Buys Velocity Spike!',
+            `${token.name} ($${token.symbol}) shooting fast with ${token.buyVelocity}% buys!`
+          );
+        });
+
+        playSurgeAudio('high_buys');
+      }
+
+      // Check for Coin Dumping events (below 3X) (Requirement 10)
+      if (result.dumpedTokens && result.dumpedTokens.length > 0) {
+        result.dumpedTokens.forEach((token) => {
+          const currentMult = (token.currentPriceSol / token.initialPriceSol);
+          const newNotif: AppNotification = {
+            id: `notif-dump-${Date.now()}-${token.mint.slice(0, 4)}`,
+            type: 'coin_dumping',
+            title: '⚠️ Warning Coin Dumping',
+            message: `${token.name} ($${token.symbol}) dropped to ${currentMult.toFixed(2)}x (fell below 3.0X threshold)!`,
+            mint: token.mint,
+            name: token.name,
+            symbol: token.symbol,
+            multiplier: currentMult,
+            marketCapUsd: token.currentMarketCapUsd,
+            timestamp: Date.now(),
+          };
+          setNotifications((prev) => [newNotif, ...prev]);
+
+          AuthService.sendDesktopNotification(
+            '⚠️ Warning Coin Dumping!',
+            `${token.name} ($${token.symbol}) dropped below 3X on Pump.fun!`
+          );
+        });
+
+        playSurgeAudio('dumping');
+      }
+
+      // Check for 5x / 10x surges in this cycle
+      if (result.surge10xTokens.length > 0) {
+        playSurgeAudio('10x');
+      } else if (result.surge5xTokens.length > 0) {
+        playSurgeAudio('5x');
+      }
+    } catch {
+      // Background retry
     } finally {
       setIsSyncing(false);
+      isSyncingRef.current = false;
     }
-  }, [solUsdPrice]);
+  }, [solUsdPrice, playSurgeAudio]);
 
-  // Clean reset of logs and cache
-  const handleClearLogsAndCache = useCallback(() => {
-    const { tokens: emptyTokens, logs: cleanLogs } = PumpSyncService.clearLogsAndCache();
-    setTokens(emptyTokens);
-    setLogs(cleanLogs);
-    setNotifications([]);
-    setAlertsCount(0);
-  }, []);
-
-  // Synchronize live real-time coins from Pump.fun on initial load
+  // Initial Sync on Mount
   useEffect(() => {
     handleSyncRealTime();
   }, [handleSyncRealTime]);
 
-  // Simulate Solana block slot progression and small latency fluctuations
+  // 15-Second Heartbeat Synchronization Loop
   useEffect(() => {
-    const interval = setInterval(() => {
-      setBlockSlot((prev) => prev + 1);
-      setLatencyMs((prev) => Math.max(75, Math.min(190, prev + Math.floor((Math.random() - 0.5) * 8))));
-    }, 400);
+    if (!isAutoSyncActive) return;
 
-    return () => clearInterval(interval);
+    const intervalTimer = setInterval(() => {
+      setSyncCountdown((prev) => {
+        if (prev <= 1) {
+          handleSyncRealTime();
+          return siteConfig.autoSyncIntervalSeconds || 15;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(intervalTimer);
+  }, [isAutoSyncActive, handleSyncRealTime, siteConfig.autoSyncIntervalSeconds]);
+
+  // 24h 00:00 Midnight Reset Countdown Tracker
+  useEffect(() => {
+    const updateMidnightTimer = () => {
+      const remaining = PumpSyncService.getTimeUntilMidnight();
+      setTimeUntilMidnight(remaining.formatted);
+      PumpSyncService.checkAndExecute24hMidnightReset();
+    };
+
+    updateMidnightTimer();
+    const timer = setInterval(updateMidnightTimer, 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  // Handler to simulate an instant new Pump.fun mint event
+  // Live block slot simulator
+  useEffect(() => {
+    const slotInterval = setInterval(() => {
+      setBlockSlot((s) => s + 1);
+      setLatencyMs(Math.floor(95 + Math.random() * 45));
+    }, 400);
+    return () => clearInterval(slotInterval);
+  }, []);
+
+  // Handler for manual 00:00 midnight reset
+  const handleManualMidnightReset = () => {
+    const result = PumpSyncService.clearLogsAndCache();
+    setLogs(result.logs);
+    setNotifications([]);
+    const resetNotice: LogEntry = {
+      id: `manual-midnight-${Date.now()}`,
+      timestamp: Date.now(),
+      level: 'info',
+      tag: '00:00 RESET',
+      message: '⏰ Manual 00:00 Reset executed: All historical logs cleared, 15s price synchronizer reset.',
+    };
+    setLogs([resetNotice]);
+  };
+
+  const handleClearLogsAndCache = () => {
+    const result = PumpSyncService.clearLogsAndCache();
+    setLogs(result.logs);
+  };
+
+  // Handler to trigger simulated coin dumping (< 3X) (Requirement 10)
+  const handleTriggerSimulatedDump = (targetMint?: string) => {
+    setTokens((prev) => {
+      if (prev.length === 0) return prev;
+      const mintToDump = targetMint || prev[0].mint;
+      return prev.map((token) => {
+        if (token.mint !== mintToDump) return token;
+        const peakMult = Math.max(token.highestMultiplier, 4.2);
+        const dumpedMultiplier = 1.75; // strictly < 3.0X
+        const newPrice = token.initialPriceSol * dumpedMultiplier;
+        const newCapSol = token.initialMarketCapSol * dumpedMultiplier;
+        const now = Date.now();
+        const dropPct = Math.round(((peakMult - dumpedMultiplier) / peakMult) * 100);
+
+        playSurgeAudio('dumping');
+
+        const newNotif: AppNotification = {
+          id: `notif-dump-${now}`,
+          type: 'coin_dumping',
+          title: '⚠️ Warning Coin Dumping',
+          message: `${token.name} ($${token.symbol}) dropped to ${dumpedMultiplier.toFixed(2)}x (fell below 3.0X from peak ${peakMult.toFixed(1)}x)! Drawdown: -${dropPct}%`,
+          mint: token.mint,
+          name: token.name,
+          symbol: token.symbol,
+          multiplier: dumpedMultiplier,
+          marketCapUsd: newCapSol * solUsdPrice,
+          timestamp: now,
+          dropPercent: dropPct,
+        };
+        setNotifications((n) => [newNotif, ...n]);
+
+        AuthService.sendDesktopNotification(
+          '⚠️ Warning Coin Dumping!',
+          `${token.name} ($${token.symbol}) collapsed below 3X to ${dumpedMultiplier.toFixed(2)}x!`
+        );
+
+        const logEntry: LogEntry = {
+          id: `dump-${now}`,
+          timestamp: now,
+          level: 'alert',
+          tag: 'WARNING COIN DUMPING',
+          message: `⚠️ [Warning Coin Dumping] ${token.name} ($${token.symbol}) collapsed to ${dumpedMultiplier.toFixed(2)}x (< 3.0X) from peak ${peakMult.toFixed(1)}x. Drawdown: -${dropPct}%.`,
+        };
+        setLogs((p) => [logEntry, ...p]);
+
+        return {
+          ...token,
+          highestMultiplier: peakMult,
+          currentPriceSol: newPrice,
+          currentMarketCapSol: newCapSol,
+          currentMarketCapUsd: newCapSol * solUsdPrice,
+          isDumped: true,
+          dumpWarning: true,
+          dumpPeakMultiplier: peakMult,
+          dumpCurrentMultiplier: dumpedMultiplier,
+          dumpDropPercent: dropPct,
+          dumpTimestamp: now,
+          sellCount: token.sellCount + 28,
+          tradeCount: token.tradeCount + 30,
+          isHighBuys: false,
+          priceChange15s: -dropPct,
+        };
+      });
+    });
+  };
+
+  // Handler to simulate new token mint
   const handleSimulateNewMint = () => {
-    const randomHex = () => Math.random().toString(36).substring(2, 8).toUpperCase();
-    const names = ['Axiom Velocity', 'Moonshot Grok', 'Solana Turbo Cat', 'Quantum Pepe', 'Cyber Whales'];
-    const chosenName = `${names[Math.floor(Math.random() * names.length)]} ${Math.floor(Math.random() * 99)}`;
-    const chosenSymbol = chosenName.split(' ')[0].substring(0, 5).toUpperCase();
-    const mint = `${randomHex()}${randomHex()}${randomHex()}${randomHex()}pump`;
-    const creator = `${randomHex()}${randomHex()}${randomHex()}sol`;
+    const symbolSuffix = Math.floor(10 + Math.random() * 89);
+    const mockMint = `PUMP${Math.random().toString(36).substring(2, 7)}soL${Math.random().toString(36).substring(2, 5)}`;
+    const now = Date.now();
+    const initialPrice = 0.000000032;
 
     const newToken: TrackedToken = {
-      mint,
-      name: chosenName,
-      symbol: chosenSymbol,
-      uri: `https://ipfs.io/ipfs/${randomHex()}`,
-      creator,
-      bondingCurve: `${randomHex()}${randomHex()}curve`,
-      createdAt: Date.now(),
-      initialPriceSol: 0.000000028,
+      mint: mockMint,
+      name: `Sol Rocket ${symbolSuffix}`,
+      symbol: `ROCKET${symbolSuffix}`,
+      uri: 'https://pump.fun',
+      creator: `Dev${Math.random().toString(36).substring(2, 6)}Sol`,
+      bondingCurve: `Curve${Math.random().toString(36).substring(2, 8)}`,
+      createdAt: now,
+      initialPriceSol: initialPrice,
       initialMarketCapSol: 28.0,
       initialMarketCapUsd: 28.0 * solUsdPrice,
-      currentPriceSol: 0.000000028,
+      currentPriceSol: initialPrice,
       currentMarketCapSol: 28.0,
       currentMarketCapUsd: 28.0 * solUsdPrice,
       highestMultiplier: 1.0,
@@ -211,19 +466,103 @@ export default function App() {
       buyCount: 1,
       sellCount: 0,
       volumeSol: 1.2,
-      lastTradeTimestamp: Date.now(),
+      lastTradeTimestamp: now,
+      isHighBuys: false,
+      buyVelocity: 100,
+      priceChange15s: 0,
     };
 
     setTokens((prev) => [newToken, ...prev]);
 
-    const mintLog: LogEntry = {
-      id: `mint-${Date.now()}`,
-      timestamp: Date.now(),
+    const logEntry: LogEntry = {
+      id: `mint-${now}`,
+      timestamp: now,
       level: 'info',
-      tag: 'NEW MINT',
-      message: `Detected new mint: ${chosenName} ($${chosenSymbol}) | CA: ${mint.slice(0, 8)}... | Initial LP: 30 SOL`,
+      tag: 'NEW LISTING',
+      message: `✨ Newly Listed: ${newToken.name} ($${newToken.symbol}) | Initial LP: 28 SOL ($${Math.round(28 * solUsdPrice)})`,
+      data: { mint: mockMint },
     };
-    setLogs((prev) => [mintLog, ...prev]);
+    setLogs((prev) => [logEntry, ...prev]);
+
+    const newNotif: AppNotification = {
+      id: `notif-mint-${now}`,
+      type: 'new_listing',
+      title: '✨ New Coin Listed on Pump.fun!',
+      message: `${newToken.name} ($${newToken.symbol}) just minted on Solana! Initial LP: 28 SOL`,
+      mint: newToken.mint,
+      name: newToken.name,
+      symbol: newToken.symbol,
+      multiplier: 1.0,
+      marketCapUsd: newToken.currentMarketCapUsd,
+      timestamp: now,
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+    playSurgeAudio('listing');
+  };
+
+  // Handler to inject custom token (from Admin Dashboard)
+  const handleInjectCustomToken = (newToken: TrackedToken) => {
+    setTokens((prev) => [newToken, ...prev]);
+    if (newToken.isDumped) {
+      handleTriggerSimulatedDump(newToken.mint);
+    }
+  };
+
+  // Handler to simulate High Buys flurry
+  const handleSimulateHighBuys = (mint: string) => {
+    setTokens((prev) =>
+      prev.map((token) => {
+        if (token.mint !== mint) return token;
+        const now = Date.now();
+        const addedBuys = 15;
+        const total = token.tradeCount + addedBuys;
+        const buys = token.buyCount + addedBuys;
+        const velocity = Math.round((buys / total) * 100);
+        const newMult = Math.max(token.highestMultiplier, (token.currentPriceSol * 1.35) / token.initialPriceSol);
+        const newPrice = token.currentPriceSol * 1.35;
+        const newCapSol = token.currentMarketCapSol * 1.35;
+
+        playSurgeAudio('high_buys');
+
+        const newNotif: AppNotification = {
+          id: `notif-hb-${now}`,
+          type: 'high_buys',
+          title: '🔥 High Buys Velocity Spike!',
+          message: `${token.name} ($${token.symbol}) shooting fast with ${velocity}% buy pressure!`,
+          mint: token.mint,
+          name: token.name,
+          symbol: token.symbol,
+          multiplier: newMult,
+          marketCapUsd: newCapSol * solUsdPrice,
+          timestamp: now,
+          buyVelocity: velocity,
+        };
+        setNotifications((n) => [newNotif, ...n]);
+
+        const logEntry: LogEntry = {
+          id: `hb-${now}`,
+          timestamp: now,
+          level: 'warn',
+          tag: 'HIGH BUYS',
+          message: `🔥 High Buys: ${token.name} ($${token.symbol}) shooting up with ${velocity}% buys! 15s delta: +35.0%`,
+        };
+        setLogs((p) => [logEntry, ...p]);
+
+        return {
+          ...token,
+          buyCount: buys,
+          tradeCount: total,
+          isHighBuys: true,
+          buyVelocity: velocity,
+          priceChange15s: 35.0,
+          currentPriceSol: newPrice,
+          currentMarketCapSol: newCapSol,
+          currentMarketCapUsd: newCapSol * solUsdPrice,
+          highestMultiplier: newMult,
+          lastTradeTimestamp: now,
+        };
+      })
+    );
   };
 
   // Handler to simulate buying waves or 5x/10x surges on a token
@@ -243,10 +582,9 @@ export default function App() {
         const is10xNow = newMult >= 10.0;
 
         if (is10xNow && !was10x) {
-          playSurgeAudio(true);
+          playSurgeAudio('10x');
           const timeSec = ((now - token.createdAt) / 1000).toFixed(1);
           
-          // Dispatch in-app notification
           const newNotif: AppNotification = {
             id: `notif-10x-${now}`,
             type: '10x',
@@ -262,7 +600,6 @@ export default function App() {
           setNotifications((n) => [newNotif, ...n]);
           setAlertsCount((c) => c + 1);
 
-          // Native desktop notification
           AuthService.sendDesktopNotification(
             '💥 10X MOONSHOT ALERT!',
             `${token.name} ($${token.symbol}) hit ${newMult.toFixed(1)}x ($${Math.round(newCapSol * solUsdPrice).toLocaleString()})!`
@@ -277,10 +614,9 @@ export default function App() {
           };
           setLogs((p) => [logEntry, ...p]);
         } else if (is5xNow && !was5x) {
-          playSurgeAudio(false);
+          playSurgeAudio('5x');
           const timeSec = ((now - token.createdAt) / 1000).toFixed(1);
 
-          // Dispatch in-app notification
           const newNotif: AppNotification = {
             id: `notif-5x-${now}`,
             type: '5x',
@@ -296,7 +632,6 @@ export default function App() {
           setNotifications((n) => [newNotif, ...n]);
           setAlertsCount((c) => c + 1);
 
-          // Native desktop notification
           AuthService.sendDesktopNotification(
             '🚀 5X MULTIPLIER ALERT!',
             `${token.name} ($${token.symbol}) reached ${newMult.toFixed(1)}x on Solana bonding curve!`
@@ -318,44 +653,72 @@ export default function App() {
           currentPriceSol: newPrice,
           currentMarketCapSol: newCapSol,
           currentMarketCapUsd: newCapSol * solUsdPrice,
-          notified5x: was5x || is5xNow,
-          notified10x: was10x || is10xNow,
-          surgeTime5x: token.surgeTime5x || (is5xNow ? now - token.createdAt : undefined),
-          surgeTime10x: token.surgeTime10x || (is10xNow ? now - token.createdAt : undefined),
+          notified5x: token.notified5x || is5xNow,
+          notified10x: token.notified10x || is10xNow,
           tradeCount: token.tradeCount + 5,
           buyCount: token.buyCount + 5,
-          volumeSol: token.volumeSol + 14.5,
+          isDumped: false,
+          dumpWarning: false,
           lastTradeTimestamp: now,
         };
       })
     );
   };
 
+  const handleAuthSuccess = (user: AuthUser) => {
+    setCurrentUser(user);
+    // If admin logged in (ADMIN01 / 125252), open Admin Dashboard directly!
+    if (user.username === ADMIN_USERNAME || user.isAdmin || user.role === 'admin') {
+      setActiveTab('admin');
+    }
+  };
+
   const handleLogout = () => {
     AuthService.logout();
     setCurrentUser(null);
-    const log: LogEntry = {
-      id: `logout-${Date.now()}`,
-      timestamp: Date.now(),
-      level: 'info',
-      tag: 'AUTH',
-      message: 'User logged out. Switched to public guest session.',
-    };
-    setLogs((l) => [log, ...l]);
+    if (activeTab === 'admin') {
+      setActiveTab('feed');
+    }
+    // Reopen Auth modal immediately per Requirement 5
+    setIsAuthModalOpen(true);
   };
 
+  const highBuysCount = tokens.filter((t) => t.isHighBuys).length;
+  const dumpedCount = tokens.filter((t) => t.isDumped || (t.highestMultiplier >= 3.0 && (t.currentPriceSol / t.initialPriceSol) < 3.0)).length;
+
   return (
-    <div className="min-h-screen bg-[#090a0f] text-zinc-100 flex flex-col selection:bg-emerald-500 selection:text-zinc-950">
-      {/* Top App Navigation */}
+    <div className="min-h-screen bg-[#07090e] text-zinc-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-zinc-950">
+      {/* Site-Wide Admin Broadcast Announcement Bar */}
+      {siteConfig.announcementEnabled && siteConfig.announcementText && (
+        <div className={`px-4 py-2 text-xs font-semibold flex items-center justify-between border-b ${
+          siteConfig.announcementType === 'alert'
+            ? 'bg-rose-950/80 border-rose-500/40 text-rose-200'
+            : siteConfig.announcementType === 'warning'
+            ? 'bg-amber-950/80 border-amber-500/40 text-amber-200'
+            : siteConfig.announcementType === 'success'
+            ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-200'
+            : 'bg-indigo-950/80 border-indigo-500/40 text-indigo-200'
+        }`}>
+          <div className="flex items-center gap-2 max-w-5xl mx-auto">
+            {siteConfig.announcementType === 'alert' ? <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" /> :
+             siteConfig.announcementType === 'warning' ? <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" /> :
+             siteConfig.announcementType === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> :
+             <Info className="w-4 h-4 text-indigo-400 shrink-0" />}
+            <span>{siteConfig.announcementText}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Main Top Navbar */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        isLiveWs={isLiveWs}
-        setIsLiveWs={setIsLiveWs}
         latencyMs={latencyMs}
         blockSlot={blockSlot}
         trackedCount={tokens.length}
         alertsCount={alertsCount}
+        highBuysCount={highBuysCount}
+        dumpedCount={dumpedCount}
         currentUser={currentUser}
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onLogout={handleLogout}
@@ -363,48 +726,78 @@ export default function App() {
         unreadNotificationsCount={notifications.length}
         soundEnabled={soundEnabled}
         onToggleSound={() => setSoundEnabled(!soundEnabled)}
-        watchlistCount={watchlistMints.length}
+        isAutoSyncActive={isAutoSyncActive}
+        onToggleAutoSync={() => setIsAutoSyncActive(!isAutoSyncActive)}
+        syncCountdownSeconds={syncCountdown}
+        siteTitle={siteConfig.siteTitle}
+        siteSubtitle={siteConfig.siteSubtitle}
       />
 
       {/* Main Content Viewport */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* RADAR FEED VIEW */}
+        {/* 1. RADAR FEED VIEW */}
         {activeTab === 'feed' && (
           <div className="space-y-6">
-            {/* Previous 5x / 10x Runners Hall of Fame Ticker */}
             <PreviousRunnersTicker
               liveTokens={tokens}
               onSelectToken={() => setActiveTab('feed')}
               solUsdPrice={solUsdPrice}
             />
 
-            {/* Live Sniper Radar Feed */}
+            {/* Live Sniper Radar Feed (Requirement 1: header banner removed and left invisible) */}
             <LiveSniperFeed
               tokens={tokens}
               onSimulateNewMint={handleSimulateNewMint}
               onSimulateTrade={handleSimulateTrade}
               onSelectTokenForLookup={() => setActiveTab('feed')}
               onClearLogsAndCache={handleClearLogsAndCache}
-              onSyncRealTime={handleSyncRealTime}
+              onSyncRealTime={() => handleSyncRealTime(true)}
               isSyncing={isSyncing}
               solUsdPrice={solUsdPrice}
-              watchlistMints={watchlistMints}
-              onToggleWatchlist={handleToggleWatchlist}
+              syncCountdownSeconds={syncCountdown}
+              isAutoSyncActive={isAutoSyncActive}
+              onToggleAutoSync={() => setIsAutoSyncActive(!isAutoSyncActive)}
+              timeUntilMidnight={timeUntilMidnight}
+              onSimulateHighBuys={handleSimulateHighBuys}
+              onSimulateDump={handleTriggerSimulatedDump}
             />
 
-            {/* Live Terminal Log Stream docked right under the radar feed */}
+            {/* Docked Live Terminal */}
             <div className="pt-4 border-t border-zinc-800/80">
               <TerminalLogs
                 logs={logs}
                 onClearLogs={handleClearLogsAndCache}
-                onSyncRealTime={handleSyncRealTime}
+                onSyncRealTime={() => handleSyncRealTime(true)}
                 isSyncing={isSyncing}
+                onManualMidnightReset={handleManualMidnightReset}
               />
             </div>
           </div>
         )}
 
-        {/* 5X / 10X RUNNERS DEDICATED VIEW */}
+        {/* 2. HIGH BUYS VIEW (Requirement 2: header banner removed and left invisible) */}
+        {activeTab === 'high_buys' && (
+          <div className="space-y-6">
+            <LiveSniperFeed
+              tokens={tokens.filter((t) => t.isHighBuys)}
+              onSimulateNewMint={handleSimulateNewMint}
+              onSimulateTrade={handleSimulateTrade}
+              onSelectTokenForLookup={() => {}}
+              onClearLogsAndCache={handleClearLogsAndCache}
+              onSyncRealTime={() => handleSyncRealTime(true)}
+              isSyncing={isSyncing}
+              solUsdPrice={solUsdPrice}
+              syncCountdownSeconds={syncCountdown}
+              isAutoSyncActive={isAutoSyncActive}
+              onToggleAutoSync={() => setIsAutoSyncActive(!isAutoSyncActive)}
+              timeUntilMidnight={timeUntilMidnight}
+              onSimulateHighBuys={handleSimulateHighBuys}
+              onSimulateDump={handleTriggerSimulatedDump}
+            />
+          </div>
+        )}
+
+        {/* 3. 5X / 10X RUNNERS DEDICATED VIEW */}
         {activeTab === 'runners' && (
           <div className="space-y-6">
             <PreviousRunnersTicker
@@ -415,10 +808,10 @@ export default function App() {
             <div className="bg-zinc-900/80 border border-zinc-800 rounded-3xl p-6 shadow-xl">
               <h3 className="font-bold text-base text-white mb-2 flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-amber-400" />
-                Active Multiplier Runners Filtering
+                Active Multiplier Runners
               </h3>
               <p className="text-xs text-zinc-400 mb-6">
-                All tokens that have surged 5x, 10x, and above during current and previous on-chain tracking sessions.
+                All tokens that have surged 5x, 10x, and above during live on-chain tracking sessions.
               </p>
               <LiveSniperFeed
                 tokens={tokens.filter((t) => t.highestMultiplier >= 2.0)}
@@ -426,93 +819,80 @@ export default function App() {
                 onSimulateTrade={handleSimulateTrade}
                 onSelectTokenForLookup={() => {}}
                 onClearLogsAndCache={handleClearLogsAndCache}
-                onSyncRealTime={handleSyncRealTime}
+                onSyncRealTime={() => handleSyncRealTime(true)}
                 isSyncing={isSyncing}
                 solUsdPrice={solUsdPrice}
-                watchlistMints={watchlistMints}
-                onToggleWatchlist={handleToggleWatchlist}
+                syncCountdownSeconds={syncCountdown}
+                isAutoSyncActive={isAutoSyncActive}
+                onToggleAutoSync={() => setIsAutoSyncActive(!isAutoSyncActive)}
+                timeUntilMidnight={timeUntilMidnight}
+                onSimulateHighBuys={handleSimulateHighBuys}
+                onSimulateDump={handleTriggerSimulatedDump}
               />
             </div>
           </div>
         )}
 
-        {/* WATCHLIST VIEW */}
-        {activeTab === 'watchlist' && (
-          <WatchlistPanel
-            watchlistMints={watchlistMints}
+        {/* 4. DUMPED COINS VIEW (Requirement 10) */}
+        {activeTab === 'dumped' && (
+          <DumpedCoinsList
             tokens={tokens}
-            onToggleWatchlist={handleToggleWatchlist}
-            onSelectToken={() => setActiveTab('feed')}
+            onSimulateDump={() => handleTriggerSimulatedDump()}
+            onSimulateTrade={handleSimulateTrade}
             solUsdPrice={solUsdPrice}
           />
         )}
 
-        {/* LIVE TERMINAL VIEW */}
+        {/* 5. LIVE TERMINAL VIEW */}
         {activeTab === 'logs' && (
           <TerminalLogs
             logs={logs}
             onClearLogs={handleClearLogsAndCache}
-            onSyncRealTime={handleSyncRealTime}
+            onSyncRealTime={() => handleSyncRealTime(true)}
             isSyncing={isSyncing}
+            onManualMidnightReset={handleManualMidnightReset}
           />
         )}
 
-        {/* BONDING CURVE MATH CALCULATOR */}
+        {/* 6. BONDING CURVE MATH CALCULATOR */}
         {activeTab === 'curve' && (
           <BondingCurveCalculator solUsdPrice={solUsdPrice} />
         )}
 
-        {/* RENDER DEPLOYMENT SETTINGS */}
-        {activeTab === 'render' && <RenderDeployDocs />}
+        {/* 7. VERCEL & RENDER DEPLOY DOCUMENTATION VIEW */}
+        {activeTab === 'render' && (
+          <RenderDeployDocs />
+        )}
+
+        {/* 8. ADMIN DASHBOARD VIEW (Requirements 6, 8, 9) */}
+        {activeTab === 'admin' && (
+          <AdminDashboard
+            onSiteConfigUpdated={(cfg) => setSiteConfig(cfg)}
+            onInjectToken={handleInjectCustomToken}
+            onTriggerDump={() => handleTriggerSimulatedDump()}
+          />
+        )}
       </main>
 
-      {/* Registration & Authentication Portal Modal */}
+      {/* Slide-out Notification Center Drawer */}
+      <NotificationCenter
+        notifications={notifications}
+        onClearAll={() => setNotifications([])}
+        onSelectToken={() => setActiveTab('feed')}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled(!soundEnabled)}
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
+      />
+
+      {/* User Registration & Login Modal (Requirement 5: first thing seen on load when not logged in) */}
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onAuthSuccess={(user) => {
-          setCurrentUser(user);
-          const log: LogEntry = {
-            id: `auth-success-${Date.now()}`,
-            timestamp: Date.now(),
-            level: 'success',
-            tag: 'DATABASE',
-            message: `User ${user.username} authenticated. Live database connected.`,
-          };
-          setLogs((l) => [log, ...l]);
-        }}
+        onAuthSuccess={handleAuthSuccess}
+        initialMode="register"
+        isFirstVisitGate={!currentUser}
       />
-
-      {/* In-App Notification Center Drawer */}
-      <NotificationCenter
-        isOpen={isNotificationsOpen}
-        onClose={() => setIsNotificationsOpen(false)}
-        notifications={notifications}
-        onClearAll={() => setNotifications([])}
-        onSelectToken={() => setIsNotificationsOpen(false)}
-        soundEnabled={soundEnabled}
-        onToggleSound={() => setSoundEnabled(!soundEnabled)}
-      />
-
-      {/* App Footer */}
-      <footer className="border-t border-zinc-900 bg-[#07080c] py-5 px-4 text-xs text-zinc-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="font-semibold text-zinc-300">PumpSurge Web &amp; Mobile App</span>
-            <span>•</span>
-            <span className="font-mono text-zinc-500">Render Production Ready</span>
-          </div>
-
-          <div className="flex items-center gap-4 text-[11px]">
-            <span>Live SQLite/JSON Database</span>
-            <span>•</span>
-            <span>Gmail Registration Portal</span>
-            <span>•</span>
-            <span>5x/10x Push Notifications</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

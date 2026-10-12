@@ -87,6 +87,16 @@ export interface TrackedToken {
   sellCount: number;
   volumeSol: number;
   lastTradeTimestamp: number;
+  isHighBuys?: boolean;
+  buyVelocity?: number; // buy dominance % or velocity rating
+  priceChange15s?: number; // price % change in last 15s sync cycle
+  prevPriceSol?: number;
+  isDumped?: boolean; // Token fell below 3x threshold
+  dumpPeakMultiplier?: number; // The peak multiplier it fell from
+  dumpCurrentMultiplier?: number; // Current multiplier < 3x
+  dumpDropPercent?: number; // Drawdown from peak %
+  dumpTimestamp?: number;
+  dumpWarning?: boolean; // Active "Warning Coin Dumping" alert
 }
 
 /**
@@ -96,8 +106,13 @@ export interface UserPreferences {
   minLiquidityFilterSol: number;
   notify5x: boolean;
   notify10x: boolean;
+  notify15sNewCoins: boolean;
+  notifyHighBuys: boolean;
+  notifyDumpWarning?: boolean;
   soundEnabled: boolean;
   browserNotifications: boolean;
+  autoSyncIntervalSeconds: number;
+  autoResetMidnight: boolean;
 }
 
 /**

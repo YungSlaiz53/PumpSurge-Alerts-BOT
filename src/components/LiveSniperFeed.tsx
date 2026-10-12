@@ -7,21 +7,18 @@ import React, { useState } from 'react';
 import { 
   Zap, 
   Flame, 
-  ExternalLink, 
   Copy, 
   Check, 
   TrendingUp, 
   Clock, 
   Search, 
-  ArrowUpRight, 
   Coins, 
-  ShieldCheck, 
   Sparkles,
-  Play,
-  RotateCcw,
-  RefreshCw,
-  Trash2,
-  Star
+  RefreshCw, 
+  Trash2, 
+  Timer,
+  AlertTriangle,
+  TrendingDown
 } from 'lucide-react';
 import { TrackedToken } from '../types';
 
@@ -34,25 +31,31 @@ interface LiveSniperFeedProps {
   onSyncRealTime: () => void;
   isSyncing: boolean;
   solUsdPrice: number;
-  watchlistMints?: string[];
-  onToggleWatchlist?: (mint: string) => void;
+  syncCountdownSeconds?: number;
+  isAutoSyncActive?: boolean;
+  onToggleAutoSync?: () => void;
+  timeUntilMidnight?: string;
+  onSimulateHighBuys?: (mint: string) => void;
+  onSimulateDump?: (mint?: string) => void;
 }
 
 export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
   tokens,
   onSimulateNewMint,
   onSimulateTrade,
-  onSelectTokenForLookup,
   onClearLogsAndCache,
   onSyncRealTime,
   isSyncing,
-  solUsdPrice,
-  watchlistMints = [],
-  onToggleWatchlist = () => {},
+  syncCountdownSeconds = 15,
+  isAutoSyncActive = true,
+  onToggleAutoSync = () => {},
+  timeUntilMidnight = '',
+  onSimulateHighBuys,
+  onSimulateDump,
 }) => {
   const [copiedMint, setCopiedMint] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
-  const [filterSurgeOnly, setFilterSurgeOnly] = useState(false);
+  const [filterCategory, setFilterCategory] = useState<'new_listings' | 'high_buys' | 'surges' | 'dumped'>('new_listings');
 
   const handleCopy = (mint: string) => {
     navigator.clipboard.writeText(mint);
@@ -60,58 +63,72 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
     setTimeout(() => setCopiedMint(null), 2000);
   };
 
+  const highBuysCount = tokens.filter(t => t.isHighBuys).length;
+  const surgesCount = tokens.filter(t => t.highestMultiplier >= 5.0).length;
+  const dumpedCount = tokens.filter(t => t.isDumped || (t.highestMultiplier >= 3.0 && (t.currentPriceSol / t.initialPriceSol) < 3.0)).length;
+
   const filteredTokens = tokens.filter(t => {
     const matchesSearch = 
       t.name.toLowerCase().includes(filterQuery.toLowerCase()) ||
       t.symbol.toLowerCase().includes(filterQuery.toLowerCase()) ||
       t.mint.toLowerCase().includes(filterQuery.toLowerCase());
     
-    if (filterSurgeOnly) {
-      return matchesSearch && t.highestMultiplier >= 5.0;
+    if (!matchesSearch) return false;
+
+    if (filterCategory === 'high_buys') {
+      return t.isHighBuys;
     }
-    return matchesSearch;
+    if (filterCategory === 'surges') {
+      return t.highestMultiplier >= 5.0;
+    }
+    if (filterCategory === 'dumped') {
+      return t.isDumped || (t.highestMultiplier >= 3.0 && (t.currentPriceSol / t.initialPriceSol) < 3.0);
+    }
+    // 'new_listings' shows all active tokens
+    return true;
   });
 
   return (
-    <div className="space-y-6">
-      {/* Control Banner & Real-time Action Controls */}
-      <div className="bg-gradient-to-r from-zinc-900 via-[#101423] to-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-xl">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                <Zap className="w-4 h-4" />
+    <div className="space-y-4">
+      {/* Sleek Action Toolbar - The bulky text banner from Requirement 1 has been removed & left invisible */}
+      <div className="bg-zinc-900/95 border border-zinc-800 rounded-2xl p-4 shadow-xl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Status Heartbeat: 15s Auto-Sync and 24h 00:00 Reset */}
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+            <button
+              onClick={onToggleAutoSync}
+              className="px-3 py-1.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 flex items-center gap-2 hover:bg-emerald-900/40 transition active:scale-95"
+              title="Toggle 15-second auto-sync"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isAutoSyncActive ? 'bg-emerald-400 opacity-75' : 'bg-zinc-600'}`}></span>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${isAutoSyncActive ? 'bg-emerald-500' : 'bg-zinc-600'}`}></span>
               </span>
-              <h2 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
-                Sub-Second Pump.fun Sniper Radar
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                  REAL-TIME SYNC
+              <span>15s Auto-Sync: <strong>{isAutoSyncActive ? 'ON' : 'PAUSED'}</strong></span>
+              {isAutoSyncActive && (
+                <span className="bg-emerald-500/20 text-emerald-200 px-1.5 py-0.5 rounded text-[10px]">
+                  {syncCountdownSeconds}s
                 </span>
-              </h2>
-            </div>
-            <p className="text-xs text-zinc-400 max-w-2xl">
-              Tracking Program <code className="text-emerald-400 font-mono">6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P</code> on Solana mainnet. Real-time coins, bonding curve liquidity, and 5x/10x moonshot detection.
-            </p>
+              )}
+            </button>
+
+            {timeUntilMidnight && (
+              <div className="px-3 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-400 flex items-center gap-1.5 text-[11px]">
+                <Timer className="w-3.5 h-3.5 text-cyan-400" />
+                <span>00:00 Reset in: {timeUntilMidnight}</span>
+              </div>
+            )}
           </div>
 
-          {/* Action Buttons: Sync Real-Time Coins, Clear Logs & Cache, Simulate */}
+          {/* Quick Toolbar Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={onSyncRealTime}
               disabled={isSyncing}
-              className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-950 transition active:scale-95 disabled:opacity-50"
+              className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow transition active:scale-95 disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Syncing Solana...' : 'Synchronize Pump.fun Coins'}</span>
-            </button>
-
-            <button
-              onClick={onClearLogsAndCache}
-              className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs border border-zinc-700 flex items-center gap-1.5 transition active:scale-95"
-              title="Clear all stored logs and token cache to start fresh"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-              <span>Clear Logs &amp; Cache</span>
+              <span>{isSyncing ? 'Syncing...' : 'Sync Prices (15s)'}</span>
             </button>
 
             <button
@@ -119,58 +136,94 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
               className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-xs border border-emerald-500/30 flex items-center gap-1.5 transition active:scale-95"
             >
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              Simulate Mint
+              <span>Simulate Mint</span>
             </button>
 
-            {tokens.length > 0 && (
-              <>
-                <button
-                  onClick={() => onSimulateTrade(tokens[0].mint, 5.2)}
-                  className="px-3 py-2 rounded-xl bg-purple-600/90 hover:bg-purple-500 text-purple-100 font-semibold text-xs border border-purple-500/40 flex items-center gap-1.5 transition active:scale-95"
-                >
-                  <Flame className="w-4 h-4 text-purple-300" />
-                  Pump Top to 5x
-                </button>
-                <button
-                  onClick={() => onSimulateTrade(tokens[0].mint, 10.5)}
-                  className="px-3 py-2 rounded-xl bg-amber-600/90 hover:bg-amber-500 text-amber-100 font-semibold text-xs border border-amber-500/40 flex items-center gap-1.5 transition active:scale-95"
-                >
-                  <TrendingUp className="w-4 h-4 text-amber-300" />
-                  Explode to 10x
-                </button>
-              </>
+            {onSimulateDump && (
+              <button
+                onClick={() => onSimulateDump()}
+                className="px-3 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 font-semibold text-xs border border-red-500/30 flex items-center gap-1.5 transition active:scale-95"
+                title="Simulate token falling below 3x threshold"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                <span>Simulate Dump (&lt; 3X)</span>
+              </button>
             )}
+
+            <button
+              onClick={onClearLogsAndCache}
+              className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs border border-zinc-700 flex items-center gap-1.5 transition"
+              title="Clear all stored logs"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            </button>
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="mt-5 pt-4 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 flex-1 max-w-sm">
+        {/* Filter Navigation & Search Bar */}
+        <div className="mt-4 pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+          {/* Category Tabs: Requirement 4: "leave it as New Listings not New Listings (15s)" */}
+          <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 overflow-x-auto max-w-full">
+            <button
+              onClick={() => setFilterCategory('new_listings')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition whitespace-nowrap ${
+                filterCategory === 'new_listings'
+                  ? 'bg-zinc-800 text-white font-bold shadow'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              New Listings ({tokens.length})
+            </button>
+
+            <button
+              onClick={() => setFilterCategory('high_buys')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1 whitespace-nowrap ${
+                filterCategory === 'high_buys'
+                  ? 'bg-orange-500 text-zinc-950 font-bold shadow'
+                  : 'text-orange-400 hover:text-orange-300 hover:bg-zinc-900'
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>High Buys ({highBuysCount})</span>
+            </button>
+
+            <button
+              onClick={() => setFilterCategory('surges')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1 whitespace-nowrap ${
+                filterCategory === 'surges'
+                  ? 'bg-purple-600 text-white font-bold shadow'
+                  : 'text-purple-400 hover:text-purple-300 hover:bg-zinc-900'
+              }`}
+            >
+              <Flame className="w-3.5 h-3.5" />
+              <span>5x/10x Surges ({surgesCount})</span>
+            </button>
+
+            <button
+              onClick={() => setFilterCategory('dumped')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1 whitespace-nowrap ${
+                filterCategory === 'dumped'
+                  ? 'bg-red-600 text-white font-bold shadow'
+                  : 'text-red-400 hover:text-red-300 hover:bg-zinc-900'
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>Dumped (&lt; 3X) ({dumpedCount})</span>
+            </button>
+          </div>
+
+          {/* Search Box */}
+          <div className="flex items-center gap-2 flex-1 max-w-xs">
             <div className="relative w-full">
               <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-zinc-500" />
               <input
                 type="text"
-                placeholder="Search symbol, name, or mint CA..."
+                placeholder="Search symbol, name, CA..."
                 value={filterQuery}
                 onChange={(e) => setFilterQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
               />
             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setFilterSurgeOnly(!filterSurgeOnly)}
-              className={`px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition ${
-                filterSurgeOnly
-                  ? 'bg-purple-950/60 border-purple-500/50 text-purple-300'
-                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              <Flame className="w-3.5 h-3.5 text-purple-400" />
-              <span>5x/10x Surges Only ({tokens.filter(t => t.highestMultiplier >= 5).length})</span>
-            </button>
-            <span className="text-zinc-500 text-xs">Showing {filteredTokens.length} of {tokens.length} tokens</span>
           </div>
         </div>
       </div>
@@ -178,58 +231,52 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
       {/* Token Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filteredTokens.length === 0 ? (
-          <div className="col-span-full py-16 text-center bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-6">
-            <div className="w-14 h-14 mx-auto rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 mb-4 border border-zinc-700/60 shadow-inner">
-              <RefreshCw className={`w-6 h-6 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
-            </div>
-            <h3 className="text-base font-bold text-zinc-200">
-              {tokens.length === 0 ? 'Cache Cleared • Ready for Real-Time Pump.fun Coins' : 'No tokens match your search query'}
-            </h3>
-            <p className="text-xs text-zinc-400 mt-1 max-w-md mx-auto">
-              {tokens.length === 0
-                ? 'Click below to pull genuine active Pump.fun coins from Solana mainnet or start monitoring incoming blocks.'
-                : 'Try adjusting your filter or search criteria to view tracked tokens.'}
+          <div className="col-span-full bg-zinc-900/40 border border-dashed border-zinc-800 rounded-2xl p-12 text-center text-zinc-500">
+            <Coins className="w-10 h-10 mx-auto mb-3 opacity-40 text-emerald-400" />
+            <h3 className="font-semibold text-zinc-300 mb-1">No tokens in this filter</h3>
+            <p className="text-xs text-zinc-500 mb-4">
+              Waiting for new on-chain listings or synchronize live pump.fun coins.
             </p>
-            {tokens.length === 0 && (
-              <div className="flex items-center justify-center gap-3 mt-5">
-                <button
-                  onClick={onSyncRealTime}
-                  disabled={isSyncing}
-                  className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-cyan-950 transition active:scale-95 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                  <span>{isSyncing ? 'Synchronizing...' : 'Synchronize Real-Time Coins'}</span>
-                </button>
-                <button
-                  onClick={onSimulateNewMint}
-                  className="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-xs border border-emerald-500/30 flex items-center gap-2 transition active:scale-95"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Simulate Test Mint</span>
-                </button>
-              </div>
-            )}
+            <button
+              onClick={onSyncRealTime}
+              disabled={isSyncing}
+              className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-xs inline-flex items-center gap-2 shadow"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>Synchronize Live Solana Pools</span>
+            </button>
           </div>
         ) : (
           filteredTokens.map((token) => {
-            const is5x = token.highestMultiplier >= 5.0 && token.highestMultiplier < 10.0;
-            const is10x = token.highestMultiplier >= 10.0;
-            const elapsedSeconds = Math.max(0, Math.round((Date.now() - token.createdAt) / 1000));
-            // Bonding curve graduation estimate (85 SOL target)
-            const bondingCurvePercent = Math.min(100, Math.max(0, (token.volumeSol / 85.0) * 100));
+            const currentMult = (token.currentPriceSol / token.initialPriceSol);
+            const isDumped = token.isDumped || (token.highestMultiplier >= 3.0 && currentMult < 3.0);
+            const is10x = token.highestMultiplier >= 10.0 && !isDumped;
+            const is5x = token.highestMultiplier >= 5.0 && !is10x && !isDumped;
+            const isHighBuys = token.isHighBuys && !isDumped;
+            const bondingCurvePercent = Math.min(100, (token.currentMarketCapSol / 85) * 100);
+            const elapsedSeconds = Math.max(1, Math.floor((Date.now() - token.createdAt) / 1000));
 
             return (
               <div
                 key={token.mint}
                 className={`bg-zinc-900/80 border rounded-2xl p-4 flex flex-col justify-between transition hover:border-zinc-700 relative overflow-hidden group ${
-                  is10x
+                  isDumped
+                    ? 'border-red-500/60 shadow-lg shadow-red-950/20 bg-gradient-to-b from-red-950/25 to-zinc-900'
+                    : is10x
                     ? 'border-amber-500/50 shadow-lg shadow-amber-950/20 bg-gradient-to-b from-amber-950/20 to-zinc-900'
                     : is5x
                     ? 'border-purple-500/50 shadow-lg shadow-purple-950/20 bg-gradient-to-b from-purple-950/20 to-zinc-900'
+                    : isHighBuys
+                    ? 'border-orange-500/50 shadow-md shadow-orange-950/20 bg-gradient-to-b from-orange-950/15 to-zinc-900'
                     : 'border-zinc-800/90'
                 }`}
               >
-                {/* Glow pill for Moonshot / 5x with subtle breathing animation */}
+                {/* Badges */}
+                {isDumped && (
+                  <div className="absolute top-0 right-0 px-3 py-1 bg-red-600 text-white font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1 animate-pulse origin-top-right z-10 shadow-lg">
+                    <AlertTriangle className="w-3 h-3 fill-white" /> WARNING COIN DUMPING
+                  </div>
+                )}
                 {is10x && (
                   <div className="absolute top-0 right-0 px-3 py-1 bg-amber-500 text-zinc-950 font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1 animate-breathe-10x origin-top-right z-10">
                     <Flame className="w-3 h-3 fill-zinc-950 animate-bounce" /> 10X MOONSHOT
@@ -237,30 +284,34 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                 )}
                 {is5x && (
                   <div className="absolute top-0 right-0 px-3 py-1 bg-purple-500 text-zinc-950 font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1 animate-breathe-5x origin-top-right z-10">
-                    <Zap className="w-3 h-3 fill-zinc-950" /> 5X SURGE DETECTED
+                    <Zap className="w-3 h-3 fill-zinc-950" /> 5X SURGE
+                  </div>
+                )}
+                {isHighBuys && (
+                  <div className="absolute top-0 right-0 px-3 py-1 bg-orange-500 text-zinc-950 font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1 animate-pulse origin-top-right z-10">
+                    <TrendingUp className="w-3 h-3 fill-zinc-950" /> HIGH BUYS
                   </div>
                 )}
 
                 <div>
                   {/* Token Header */}
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700/80 flex items-center justify-center text-lg font-black text-emerald-400 shrink-0">
+                    <div className={`w-10 h-10 rounded-xl border flex items-center justify-center text-lg font-black shrink-0 ${
+                      isDumped
+                        ? 'bg-red-950/60 border-red-500/40 text-red-400'
+                        : 'bg-zinc-800 border-zinc-700/80 text-emerald-400'
+                    }`}>
                       {token.symbol.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0 pr-16">
                       <div className="flex items-center gap-1.5">
                         <h3 className="font-bold text-sm text-zinc-100 truncate">{token.name}</h3>
-                        <span className="text-xs font-mono font-bold text-emerald-400 shrink-0">
+                        <span className={`text-xs font-mono font-bold shrink-0 ${isDumped ? 'text-red-400' : 'text-emerald-400'}`}>
                           ${token.symbol}
                         </span>
-                        <button
-                          onClick={() => onToggleWatchlist(token.mint)}
-                          className="p-1 rounded-md text-zinc-500 hover:text-amber-400 transition"
-                          title={watchlistMints.includes(token.mint) ? 'Remove from Watchlist' : 'Add to Database Watchlist'}
-                        >
-                          <Star className={`w-3.5 h-3.5 ${watchlistMints.includes(token.mint) ? 'fill-amber-400 text-amber-400' : ''}`} />
-                        </button>
                       </div>
+
+                      {/* Dev Wallet & Time */}
                       <div className="flex items-center gap-2 text-[11px] text-zinc-400 mt-0.5">
                         <span className="flex items-center gap-1 text-zinc-500">
                           <Clock className="w-3 h-3" />
@@ -272,8 +323,30 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                     </div>
                   </div>
 
+                  {/* Dumping Alert Warning Banner if coin dropped below 3X */}
+                  {isDumped && (
+                    <div className="mt-2.5 px-2.5 py-1 rounded-xl bg-red-950/60 border border-red-500/50 text-red-200 text-[11px] flex items-center justify-between font-mono">
+                      <span className="flex items-center gap-1.5 font-black text-red-300">
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-400 animate-bounce" />
+                        WARNING COIN DUMPING
+                      </span>
+                      <span className="font-bold text-red-400">&lt; 3.0X ({currentMult.toFixed(2)}x)</span>
+                    </div>
+                  )}
+
+                  {/* High Buys Velocity Pill Banner if moving shooting fast */}
+                  {isHighBuys && (
+                    <div className="mt-2.5 px-2.5 py-1 rounded-xl bg-orange-950/40 border border-orange-500/40 text-orange-300 text-[11px] flex items-center justify-between font-mono">
+                      <span className="flex items-center gap-1.5 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-orange-400 animate-ping" />
+                        HIGH BUY VELOCITY
+                      </span>
+                      <span>{token.buyVelocity || 82}% Buy Pressure ({token.buyCount} Buys)</span>
+                    </div>
+                  )}
+
                   {/* Mint Address Box (Tap to copy) */}
-                  <div className="mt-3.5 bg-zinc-950/90 border border-zinc-800 rounded-xl p-2 flex items-center justify-between gap-2">
+                  <div className="mt-3 bg-zinc-950/90 border border-zinc-800 rounded-xl p-2 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 overflow-hidden">
                       <span className="text-[10px] uppercase font-bold text-zinc-500 px-1 py-0.5 bg-zinc-900 rounded">CA</span>
                       <code className="text-xs font-mono text-zinc-300 truncate">
@@ -294,9 +367,16 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                   </div>
 
                   {/* Financial & Bonding Curve Stats */}
-                  <div className="mt-3.5 grid grid-cols-2 gap-2 text-xs">
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                     <div className="bg-zinc-950/50 border border-zinc-800/80 rounded-xl p-2.5">
-                      <div className="text-[10px] text-zinc-500 uppercase font-medium">Market Cap</div>
+                      <div className="text-[10px] text-zinc-500 uppercase font-medium flex items-center justify-between">
+                        <span>Market Cap</span>
+                        {token.priceChange15s !== undefined && token.priceChange15s !== 0 && (
+                          <span className={`text-[10px] font-bold ${token.priceChange15s > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {token.priceChange15s > 0 ? '+' : ''}{token.priceChange15s.toFixed(1)}% (15s)
+                          </span>
+                        )}
+                      </div>
                       <div className="font-bold text-zinc-100 text-sm mt-0.5">
                         ${Math.round(token.currentMarketCapUsd).toLocaleString()}
                       </div>
@@ -308,18 +388,26 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                     <div className="bg-zinc-950/50 border border-zinc-800/80 rounded-xl p-2.5">
                       <div className="text-[10px] text-zinc-500 uppercase font-medium flex items-center justify-between">
                         <span>Multiplier</span>
-                        {token.highestMultiplier > 1 && (
+                        {isDumped ? (
+                          <span className="text-[10px] text-red-400 font-bold">DUMPED &lt;3X</span>
+                        ) : token.highestMultiplier > 1 ? (
                           <span className="text-[10px] text-emerald-400 font-bold">
-                            +{( (token.highestMultiplier - 1) * 100 ).toFixed(0)}%
+                            +{((token.highestMultiplier - 1) * 100).toFixed(0)}%
                           </span>
-                        )}
+                        ) : null}
                       </div>
                       <div className={`font-black text-sm mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded-md ${
+                        isDumped ? 'text-red-300 bg-red-950/50 border border-red-500/50 animate-pulse' :
                         token.highestMultiplier >= 10 ? 'text-amber-300 bg-amber-950/40 border border-amber-500/40 animate-breathe-10x' :
                         token.highestMultiplier >= 5 ? 'text-purple-300 bg-purple-950/40 border border-purple-500/40 animate-breathe-5x' :
                         token.highestMultiplier > 1 ? 'text-emerald-400' : 'text-zinc-200'
                       }`}>
-                        {token.highestMultiplier.toFixed(2)}x
+                        {currentMult.toFixed(2)}x
+                        {token.highestMultiplier > currentMult && (
+                          <span className="text-[10px] font-normal text-zinc-400 ml-1">
+                            (pk {token.highestMultiplier.toFixed(1)}x)
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-zinc-400 font-mono">
                         {token.tradeCount} trades ({token.buyCount}B/{token.sellCount}S)
@@ -335,35 +423,51 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                     </div>
                     <div className="w-full bg-zinc-950 h-1.5 rounded-full overflow-hidden border border-zinc-800/60">
                       <div
-                        className="bg-gradient-to-r from-emerald-500 to-cyan-500 h-full rounded-full transition-all duration-500"
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isDumped
+                            ? 'bg-red-500'
+                            : 'bg-gradient-to-r from-emerald-500 to-cyan-500'
+                        }`}
                         style={{ width: `${Math.min(100, Math.max(3, bondingCurvePercent))}%` }}
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Footer Controls & Quick Sniper Deep Links */}
+                {/* Footer Controls & Quick Deep Links */}
                 <div className="mt-4 pt-3 border-t border-zinc-800/80 space-y-2">
-                  {/* Test Pump Buttons inside card */}
+                  {/* Wave simulation buttons */}
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => onSimulateTrade(token.mint, 1.5)}
-                      className="flex-1 py-1 px-2 rounded-lg bg-zinc-800/80 hover:bg-zinc-800 text-[11px] font-medium text-zinc-300 transition"
+                      onClick={() => onSimulateHighBuys ? onSimulateHighBuys(token.mint) : onSimulateTrade(token.mint, 1.8)}
+                      className="flex-1 py-1 px-1.5 rounded-lg bg-orange-950/50 hover:bg-orange-900/60 text-[11px] font-bold text-orange-300 border border-orange-500/30 transition flex items-center justify-center gap-1"
+                      title="Trigger High Buys flurry on this coin"
                     >
-                      +50% Buy
+                      <TrendingUp className="w-3 h-3" />
+                      <span>High Buys</span>
                     </button>
                     <button
                       onClick={() => onSimulateTrade(token.mint, 5.0)}
-                      className="flex-1 py-1 px-2 rounded-lg bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-500/30 text-[11px] font-bold transition"
+                      className="flex-1 py-1 px-1.5 rounded-lg bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-500/30 text-[11px] font-bold transition"
                     >
-                      Trigger 5x
+                      Pump 5x
                     </button>
                     <button
                       onClick={() => onSimulateTrade(token.mint, 10.0)}
-                      className="flex-1 py-1 px-2 rounded-lg bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 border border-amber-500/30 text-[11px] font-bold transition"
+                      className="flex-1 py-1 px-1.5 rounded-lg bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 border border-amber-500/30 text-[11px] font-bold transition"
                     >
-                      Trigger 10x
+                      Pump 10x
                     </button>
+                    {onSimulateDump && (
+                      <button
+                        onClick={() => onSimulateDump(token.mint)}
+                        className="py-1 px-2 rounded-lg bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-500/30 text-[11px] font-bold transition flex items-center gap-0.5"
+                        title="Simulate dumping below 3X"
+                      >
+                        <TrendingDown className="w-3 h-3" />
+                        <span>Dump</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Direct Web3 Sniper & DEX Action Buttons */}

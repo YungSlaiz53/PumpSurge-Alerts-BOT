@@ -143,35 +143,30 @@ export class AppDatabase {
 
   // --- USER AUTHENTICATION & MANAGEMENT ---
 
-  public static isValidGmail(email: string): boolean {
-    if (!email) return false;
-    // Must be valid live Gmail format: letters, numbers, dots before @gmail.com
-    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/i;
-    return gmailRegex.test(email.trim());
+  public static isValidUsername(username: string): boolean {
+    if (!username) return false;
+    return username.trim().length >= 3;
   }
 
-  public static isValidAlphanumericalPassword(password: string): boolean {
-    if (!password || password.length < 6) return false;
-    // Must contain letters and numbers
-    const hasLetter = /[a-zA-Z]/.test(password);
-    const hasNumber = /[0-9]/.test(password);
-    return hasLetter && hasNumber;
+  public static isValidPassword(password: string): boolean {
+    if (!password) return false;
+    return password.length >= 4;
   }
 
   public async registerUser(username: string, passwordPlain: string): Promise<{ success: boolean; user?: Omit<UserRecord, 'passwordHash'>; error?: string }> {
-    const cleanEmail = username.trim().toLowerCase();
+    const cleanUser = username.trim().toLowerCase();
 
-    if (!AppDatabase.isValidGmail(cleanEmail)) {
-      return { success: false, error: 'Username must be a valid live Gmail address (e.g., yourname@gmail.com).' };
+    if (!AppDatabase.isValidUsername(cleanUser)) {
+      return { success: false, error: 'Username must be at least 3 characters long.' };
     }
 
-    if (!AppDatabase.isValidAlphanumericalPassword(passwordPlain)) {
-      return { success: false, error: 'Password must be alphanumerical (contain both letters and numbers) and at least 6 characters.' };
+    if (!AppDatabase.isValidPassword(passwordPlain)) {
+      return { success: false, error: 'Password must be at least 4 characters long.' };
     }
 
-    const existing = this.data.users.find(u => u.username === cleanEmail);
+    const existing = this.data.users.find(u => u.username === cleanUser);
     if (existing) {
-      return { success: false, error: 'An account with this Gmail address already exists. Please sign in.' };
+      return { success: false, error: 'An account with this username already exists. Please sign in.' };
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -179,7 +174,7 @@ export class AppDatabase {
 
     const newUser: UserRecord = {
       id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      username: cleanEmail,
+      username: cleanUser,
       passwordHash,
       createdAt: Date.now(),
       lastLoginAt: Date.now(),
