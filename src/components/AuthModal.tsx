@@ -123,11 +123,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-[#0f131d] border border-zinc-800 rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-md bg-black border border-cyan-500/40 rounded-3xl p-6 md:p-8 shadow-[0_0_35px_rgba(0,240,255,0.2)] overflow-hidden">
         {/* Glow corner accents */}
-        <div className="absolute top-0 right-0 w-44 h-44 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-44 h-44 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-44 h-44 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-44 h-44 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
 
         {/* Close Button */}
         <button
@@ -140,8 +140,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Modal Header */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-tr from-emerald-500 to-cyan-500 p-0.5 shadow-lg shadow-emerald-950/50 mb-3 flex items-center justify-center">
-            <div className="w-full h-full bg-[#0f131d] rounded-[14px] flex items-center justify-center text-emerald-400 font-black text-xl">
+          <div className="w-12 h-12 mx-auto rounded-2xl bg-cyan-400 p-0.5 shadow-[0_0_15px_rgba(0,240,255,0.4)] mb-3 flex items-center justify-center">
+            <div className="w-full h-full bg-black rounded-[14px] flex items-center justify-center text-cyan-400 font-black text-xl">
               ⚡
             </div>
           </div>
@@ -214,8 +214,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             }}
             className={`py-2 rounded-lg transition ${
               mode === 'register'
-                ? 'bg-emerald-500 text-zinc-950 shadow-md font-bold'
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'bg-cyan-500 text-black shadow-[0_0_12px_rgba(0,240,255,0.4)] font-bold'
+                : 'text-zinc-400 hover:text-white'
             }`}
           >
             Register
@@ -228,8 +228,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             }}
             className={`py-2 rounded-lg transition ${
               mode === 'login'
-                ? 'bg-emerald-500 text-zinc-950 shadow-md font-bold'
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'bg-cyan-500 text-black shadow-[0_0_12px_rgba(0,240,255,0.4)] font-bold'
+                : 'text-zinc-400 hover:text-white'
             }`}
           >
             Sign In
@@ -348,7 +348,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               type="submit"
               disabled={isLoading || !isUsernameValid || !isPasswordValid}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 transition active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+              className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,240,255,0.4)] transition active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
               {isLoading ? (
                 <span className="inline-block w-4 h-4 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />

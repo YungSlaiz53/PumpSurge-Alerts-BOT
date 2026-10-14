@@ -161,3 +161,63 @@ export interface BotTelemetry {
   trackedTokensActiveCount: number;
   recentTokens: TrackedToken[];
 }
+
+/**
+ * 1+ SOL Whale Buy Transaction event
+ */
+export interface WhaleBuyTransaction {
+  id: string;
+  signature: string;
+  slot?: number;
+  timestamp: number;
+  walletAddress: string;
+  walletLabel?: string;
+  mint: string;
+  tokenSymbol: string;
+  tokenName: string;
+  solAmount: number; // >= 1.0 SOL
+  solUsdValue: number;
+  tokenAmount: number;
+  priceSol: number;
+  priceUsd: number;
+  currentMultiplier?: number;
+  holdingStatus: 'holding' | 'partially_sold' | 'sold';
+}
+
+/**
+ * Breakdown of a specific coin bought/held today by a tracked wallet
+ */
+export interface TrackedWalletHolding {
+  mint: string;
+  tokenSymbol: string;
+  tokenName: string;
+  totalSolBoughtToday: number;
+  totalTokensBoughtToday: number;
+  firstBuyTimeToday: number;
+  lastBuyTimeToday: number;
+  buyCountToday: number;
+  averageBuyPriceSol: number;
+  currentPriceSol: number;
+  currentMultiplier: number;
+  unrealizedPnlSol: number;
+  unrealizedPnlPercent: number;
+  holdingStatus: 'holding' | 'partially_sold' | 'sold';
+}
+
+/**
+ * Aggregated whale wallet tracking profile for the day
+ */
+export interface TrackedWhaleWallet {
+  walletAddress: string;
+  label?: string;
+  avatarSeed?: string;
+  firstActiveToday: number;
+  lastActiveToday: number;
+  totalBuysCountToday: number; // Count of >= 1 SOL transactions executed today
+  uniqueCoinsBoughtCountToday: number; // Number of distinct coins bought today
+  totalSolSpentToday: number; // Cumulative SOL deployed across >= 1 SOL buys today
+  holdingsToday: TrackedWalletHolding[]; // Detailed breakdown of coins bought/holding today
+  transactionsToday: WhaleBuyTransaction[];
+  isStarred?: boolean;
+  tier: 'Mega Whale (10+ SOL)' | 'High Roller (5+ SOL)' | 'Active Whale (1+ SOL)';
+}

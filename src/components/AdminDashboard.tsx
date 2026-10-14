@@ -163,17 +163,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Admin Top Banner */}
-      <div className="bg-gradient-to-r from-indigo-950/80 via-zinc-900 to-zinc-900 border border-indigo-500/40 rounded-3xl p-6 shadow-2xl">
+      {/* Admin Top Banner - Neon Blue and Black */}
+      <div className="bg-black border border-cyan-500/40 rounded-3xl p-6 shadow-[0_0_25px_rgba(0,240,255,0.12)]">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-300 shadow-inner">
-              <ShieldCheck className="w-7 h-7 text-indigo-400" />
+            <div className="w-12 h-12 rounded-2xl bg-cyan-950/80 border border-cyan-400/50 flex items-center justify-center text-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.3)]">
+              <ShieldCheck className="w-7 h-7 text-cyan-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-black text-white tracking-tight">Admin Dashboard</h2>
-                <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[11px] font-mono font-bold border border-indigo-500/30">
+                <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[11px] font-mono font-bold border border-cyan-400/30">
                   {ADMIN_USERNAME} MASTER SESSION
                 </span>
               </div>
@@ -187,15 +187,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={loadUsers}
-              className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition"
+              className="px-3 py-2 rounded-xl bg-black hover:bg-zinc-900 border border-white/20 text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition"
               title="Refresh User List"
             >
-              <RefreshCw className="w-3.5 h-3.5 text-indigo-400" />
+              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
               <span>Refresh</span>
             </button>
             <button
               onClick={() => setShowAddUser(true)}
-              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-950 transition active:scale-95"
+              className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-bold flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,240,255,0.4)] transition active:scale-95"
             >
               <Plus className="w-4 h-4" />
               <span>New User</span>
@@ -204,13 +204,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         {/* Admin Navigation Tabs */}
-        <div className="mt-6 pt-4 border-t border-zinc-800/80 flex flex-wrap items-center gap-2">
+        <div className="mt-6 pt-4 border-t border-cyan-500/20 flex flex-wrap items-center gap-2">
           <button
             onClick={() => setActiveAdminTab('users')}
             className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition ${
               activeAdminTab === 'users'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800'
+                ? 'bg-cyan-500 text-black shadow-[0_0_12px_rgba(0,240,255,0.4)]'
+                : 'bg-[#030611] text-zinc-400 hover:text-white border border-cyan-500/20'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -221,8 +221,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             onClick={() => setActiveAdminTab('site_edits')}
             className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition ${
               activeAdminTab === 'site_edits'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800'
+                ? 'bg-cyan-500 text-black shadow-[0_0_12px_rgba(0,240,255,0.4)]'
+                : 'bg-[#030611] text-zinc-400 hover:text-white border border-cyan-500/20'
             }`}
           >
             <Settings className="w-4 h-4" />

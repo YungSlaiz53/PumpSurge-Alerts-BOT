@@ -14,7 +14,8 @@ import {
   AlertCircle, 
   Timer,
   TrendingUp,
-  Sparkles
+  Sparkles,
+  Radar
 } from 'lucide-react';
 import { LogEntry } from '../types';
 import { PumpSyncService } from '../services/pumpSyncService';
@@ -69,6 +70,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
 
   const filteredLogs = logs.filter((l) => {
     if (filterLevel === 'all') return true;
+    if (filterLevel === 'whales') return l.tag.includes('WHALE');
     if (filterLevel === 'alert') return l.level === 'alert' || l.tag.includes('SURGE') || l.tag.includes('MOONSHOT');
     if (filterLevel === 'high_buys') return l.tag.includes('HIGH BUYS');
     if (filterLevel === 'dumped') return l.tag.includes('DUMPING') || l.tag.includes('DUMP');
@@ -80,9 +82,9 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
   const getLevelBadge = (level: LogEntry['level']) => {
     switch (level) {
       case 'alert':
-        return <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">ALERT</span>;
+        return <span className="px-1.5 py-0.2 rounded bg-cyan-400 text-black font-black">ALERT</span>;
       case 'success':
-        return <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-medium border border-emerald-500/30">OK</span>;
+        return <span className="px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 font-medium border border-cyan-400/40">OK</span>;
       case 'warn':
         return <span className="px-1.5 py-0.2 rounded bg-orange-500/20 text-orange-300 font-medium border border-orange-500/30">WARN</span>;
       case 'error':
@@ -93,20 +95,20 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
   };
 
   return (
-    <div className="bg-[#0b0d13] border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[520px]">
+    <div className="bg-black border border-cyan-500/30 rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(0,240,255,0.1)] flex flex-col h-[520px]">
       {/* Terminal Title Bar */}
-      <div className="px-4 py-3 bg-[#11141e] border-b border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-4 py-3 bg-[#030611] border-b border-cyan-500/20 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-rose-500/80 inline-block" />
-            <span className="w-3 h-3 rounded-full bg-amber-500/80 inline-block" />
-            <span className="w-3 h-3 rounded-full bg-emerald-500/80 inline-block" />
+            <span className="w-3 h-3 rounded-full bg-cyan-400 inline-block shadow-[0_0_8px_rgba(0,240,255,0.6)]" />
+            <span className="w-3 h-3 rounded-full bg-white/40 inline-block" />
+            <span className="w-3 h-3 rounded-full bg-zinc-700 inline-block" />
           </div>
           <span className="text-zinc-700">|</span>
-          <div className="flex items-center gap-2 font-mono text-xs font-semibold text-zinc-200">
-            <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+          <div className="flex items-center gap-2 font-mono text-xs font-semibold text-white">
+            <Terminal className="w-3.5 h-3.5 text-cyan-400" />
             <span>PumpSurge Real-Time Event &amp; Price Terminal</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-normal">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#060b17] border border-cyan-500/30 text-cyan-300 font-normal">
               {logs.length} logs
             </span>
           </div>
@@ -175,25 +177,34 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
         <span className="text-zinc-500 text-[11px]">Filter:</span>
         <button
           onClick={() => setFilterLevel('all')}
-          className={`px-2 py-0.5 rounded text-[11px] transition ${
-            filterLevel === 'all' ? 'bg-zinc-800 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'
+          className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
+            filterLevel === 'all' ? 'bg-cyan-500 text-black shadow-[0_0_8px_rgba(0,240,255,0.4)]' : 'text-zinc-400 hover:text-white'
           }`}
         >
           All ({logs.length})
         </button>
         <button
-          onClick={() => setFilterLevel('alert')}
+          onClick={() => setFilterLevel('whales')}
           className={`px-2 py-0.5 rounded text-[11px] flex items-center gap-1 transition ${
-            filterLevel === 'alert' ? 'bg-amber-500/20 text-amber-300 font-bold' : 'text-zinc-400 hover:text-zinc-200'
+            filterLevel === 'whales' ? 'bg-cyan-400 text-black font-bold shadow-[0_0_8px_rgba(0,240,255,0.4)]' : 'text-cyan-400 hover:text-white'
           }`}
         >
-          <Flame className="w-3 h-3 text-amber-400" />
+          <Radar className="w-3 h-3 text-cyan-400" />
+          1+ SOL Whales
+        </button>
+        <button
+          onClick={() => setFilterLevel('alert')}
+          className={`px-2 py-0.5 rounded text-[11px] flex items-center gap-1 transition ${
+            filterLevel === 'alert' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/40' : 'text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Flame className="w-3 h-3 text-cyan-400" />
           5x/10x Surges
         </button>
         <button
           onClick={() => setFilterLevel('high_buys')}
           className={`px-2 py-0.5 rounded text-[11px] flex items-center gap-1 transition ${
-            filterLevel === 'high_buys' ? 'bg-orange-500/20 text-orange-300 font-bold' : 'text-zinc-400 hover:text-zinc-200'
+            filterLevel === 'high_buys' ? 'bg-orange-500 text-black font-bold' : 'text-orange-400 hover:text-white'
           }`}
         >
           <TrendingUp className="w-3 h-3 text-orange-400" />
@@ -202,16 +213,16 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
         <button
           onClick={() => setFilterLevel('new_listings')}
           className={`px-2 py-0.5 rounded text-[11px] flex items-center gap-1 transition ${
-            filterLevel === 'new_listings' ? 'bg-emerald-500/20 text-emerald-300 font-bold' : 'text-zinc-400 hover:text-zinc-200'
+            filterLevel === 'new_listings' ? 'bg-cyan-500 text-black font-bold' : 'text-zinc-400 hover:text-white'
           }`}
         >
-          <Sparkles className="w-3 h-3 text-emerald-400" />
+          <Sparkles className="w-3 h-3 text-cyan-400" />
           New Listings
         </button>
         <button
           onClick={() => setFilterLevel('dumped')}
           className={`px-2 py-0.5 rounded text-[11px] flex items-center gap-1 transition ${
-            filterLevel === 'dumped' ? 'bg-red-500/20 text-red-300 font-bold' : 'text-zinc-400 hover:text-zinc-200'
+            filterLevel === 'dumped' ? 'bg-red-600 text-white font-bold' : 'text-red-400 hover:text-white'
           }`}
         >
           <AlertCircle className="w-3 h-3 text-red-400" />
@@ -220,7 +231,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
         <button
           onClick={() => setFilterLevel('system')}
           className={`px-2 py-0.5 rounded text-[11px] transition ${
-            filterLevel === 'system' ? 'bg-blue-500/20 text-blue-300 font-bold' : 'text-zinc-400 hover:text-zinc-200'
+            filterLevel === 'system' ? 'bg-white text-black font-bold' : 'text-zinc-400 hover:text-white'
           }`}
         >
           System / 00:00 Reset
@@ -228,7 +239,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
       </div>
 
       {/* Terminal Output Area */}
-      <div className="flex-1 p-4 font-mono text-xs overflow-y-auto space-y-2 select-text bg-[#090b10]">
+      <div className="flex-1 p-4 font-mono text-xs overflow-y-auto space-y-2 select-text bg-[#020408]">
         {filteredLogs.length === 0 ? (
           <div className="h-full flex items-center justify-center text-zinc-600">
             <span>No log entries match the selected filter.</span>

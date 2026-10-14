@@ -163,7 +163,7 @@ export const DumpedCoinsList: React.FC<DumpedCoinsListProps> = ({
             return (
               <div
                 key={token.mint}
-                className="bg-zinc-900/90 border-2 border-red-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden flex flex-col justify-between hover:border-red-500 transition group"
+                className="bg-black border border-red-500/50 rounded-2xl p-5 shadow-xl relative overflow-hidden flex flex-col justify-between hover:border-red-400 transition group"
               >
                 {/* Classic Warning Banner at top of card */}
                 <div className="absolute top-0 left-0 right-0 py-1 px-3 bg-red-600 text-white font-black text-[10px] tracking-wider uppercase flex items-center justify-between shadow">

@@ -64,12 +64,12 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-end p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-md bg-[#0f131d] border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] mt-12 sm:mt-14">
+    <div className="fixed inset-0 z-50 flex items-start justify-end p-4 sm:p-6 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="w-full max-w-md bg-black border border-cyan-500/40 rounded-3xl shadow-[0_0_30px_rgba(0,240,255,0.2)] overflow-hidden flex flex-col max-h-[85vh] mt-12 sm:mt-14">
         {/* Header */}
-        <div className="p-4 bg-[#141824] border-b border-zinc-800 flex items-center justify-between">
+        <div className="p-4 bg-[#030611] border-b border-cyan-500/20 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-cyan-950/80 border border-cyan-400/40 text-cyan-400 flex items-center justify-center">
               <Bell className="w-4 h-4" />
             </div>
             <div>
@@ -113,26 +113,26 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
         </div>
 
         {/* Filter Navigation Tabs */}
-        <div className="px-3 py-2 bg-zinc-950/90 border-b border-zinc-800/80 flex items-center gap-1.5 text-xs overflow-x-auto">
+        <div className="px-3 py-2 bg-[#030611] border-b border-cyan-500/20 flex items-center gap-1.5 text-xs overflow-x-auto">
           <button
             onClick={() => setFilterType('all')}
-            className={`px-2.5 py-1 rounded-lg font-medium transition ${
+            className={`px-2.5 py-1 rounded-lg font-bold transition ${
               filterType === 'all'
-                ? 'bg-zinc-800 text-white font-semibold'
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'bg-cyan-500 text-black shadow-[0_0_8px_rgba(0,240,255,0.4)]'
+                : 'text-zinc-400 hover:text-white'
             }`}
           >
             All ({notifications.length})
           </button>
           <button
             onClick={() => setFilterType('surges')}
-            className={`px-2.5 py-1 rounded-lg font-medium transition flex items-center gap-1 ${
+            className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
               filterType === 'surges'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold'
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'bg-cyan-400 text-black shadow-[0_0_8px_rgba(0,240,255,0.4)]'
+                : 'text-cyan-300 hover:text-white'
             }`}
           >
-            <Flame className="w-3 h-3 text-amber-400" />
+            <Flame className="w-3 h-3 text-cyan-400" />
             5x/10x Surges
           </button>
           <button

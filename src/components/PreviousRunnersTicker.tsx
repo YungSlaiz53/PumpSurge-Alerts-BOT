@@ -115,30 +115,30 @@ export const PreviousRunnersTicker: React.FC<PreviousRunnersTickerProps> = ({
   };
 
   return (
-    <div className="bg-gradient-to-r from-amber-950/20 via-zinc-900 to-purple-950/20 border border-zinc-800 rounded-2xl p-4 shadow-xl">
+    <div className="bg-black border border-cyan-500/30 rounded-2xl p-4 shadow-[0_0_20px_rgba(0,240,255,0.08)]">
       {/* Title Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
-          <span className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30">
+          <span className="p-1.5 rounded-lg bg-cyan-950/80 text-cyan-400 border border-cyan-400/40">
             <Trophy className="w-4 h-4" />
           </span>
           <div>
-            <h3 className="font-bold text-sm text-zinc-100 flex items-center gap-2">
+            <h3 className="font-bold text-sm text-white flex items-center gap-2">
               Previous 5x / 10x Moonshot Runners
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/30">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-extrabold border border-cyan-400/30">
                 HALL OF FAME
               </span>
             </h3>
             <p className="text-[11px] text-zinc-400">
               Verified historical surge alerts captured &amp; stored in the{' '}
-              <span className="text-emerald-400 font-semibold">Live Database</span>
+              <span className="text-cyan-400 font-semibold">Live Database</span>
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-semibold flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs px-3 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-400/30 text-cyan-300 font-semibold flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
             <span>Database Synced</span>
           </span>
         </div>
@@ -159,20 +159,20 @@ export const PreviousRunnersTicker: React.FC<PreviousRunnersTickerProps> = ({
               key={runner.mint}
               className={`p-3.5 rounded-xl border relative overflow-hidden transition hover:scale-[1.01] ${
                 is10x
-                  ? 'bg-[#15120a] border-amber-500/40 shadow-lg shadow-amber-950/20'
-                  : 'bg-[#120f1c] border-purple-500/40 shadow-lg shadow-purple-950/20'
+                  ? 'bg-[#030611] border-cyan-400/60 shadow-[0_0_15px_rgba(0,240,255,0.2)]'
+                  : 'bg-[#030611] border-white/10 hover:border-cyan-400/40'
               }`}
             >
               {/* Top Row: Rank & Multiplier */}
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-md bg-zinc-800 text-zinc-300 text-[10px] font-bold flex items-center justify-center">
+                  <span className="w-5 h-5 rounded-md bg-[#060b17] border border-cyan-500/30 text-cyan-300 text-[10px] font-bold flex items-center justify-center">
                     #{index + 1}
                   </span>
                   <div className="font-bold text-xs text-white truncate max-w-[120px]">
                     {runner.name}
                   </div>
-                  <span className="text-[10px] font-mono text-emerald-400">
+                  <span className="text-[10px] font-mono text-cyan-400">
                     ${runner.symbol}
                   </span>
                 </div>
@@ -180,11 +180,11 @@ export const PreviousRunnersTicker: React.FC<PreviousRunnersTickerProps> = ({
                 <div
                   className={`px-2 py-0.5 rounded-lg text-xs font-black font-mono flex items-center gap-1 ${
                     is10x
-                      ? 'bg-amber-500 text-zinc-950 shadow animate-breathe-10x'
-                      : 'bg-purple-500 text-zinc-950 shadow animate-breathe-5x'
+                      ? 'bg-cyan-400 text-black shadow animate-breathe-10x'
+                      : 'bg-cyan-500 text-black shadow animate-breathe-5x'
                   }`}
                 >
-                  {is10x ? <Flame className="w-3 h-3 fill-zinc-950" /> : <Zap className="w-3 h-3 fill-zinc-950" />}
+                  {is10x ? <Flame className="w-3 h-3 fill-black" /> : <Zap className="w-3 h-3 fill-black" />}
                   <span>{runner.highestMultiplier.toFixed(2)}x</span>
                 </div>
               </div>
@@ -222,7 +222,7 @@ export const PreviousRunnersTicker: React.FC<PreviousRunnersTickerProps> = ({
                   href={`https://pump.fun/coin/${runner.mint}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-2 py-1 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-[10px] font-semibold text-emerald-300 transition"
+                  className="px-2 py-1 rounded-lg bg-black hover:bg-cyan-950/60 border border-cyan-500/30 text-[10px] font-semibold text-cyan-300 transition"
                   title="View coin on Pump.fun"
                 >
                   💊 Pump.fun
@@ -232,7 +232,7 @@ export const PreviousRunnersTicker: React.FC<PreviousRunnersTickerProps> = ({
                   href={`https://dexscreener.com/solana/${runner.mint}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[10px] font-semibold text-cyan-400 transition"
+                  className="px-2 py-1 rounded-lg bg-black hover:bg-zinc-900 border border-white/20 text-[10px] font-semibold text-white transition"
                   title="View chart on DexScreener"
                 >
                   📊 Dex

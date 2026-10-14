@@ -52,33 +52,33 @@ export const BondingCurveCalculator: React.FC<BondingCurveCalculatorProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Overview Banner */}
-      <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Overview Banner - Neon Blue and Black */}
+      <div className="bg-black border border-cyan-500/30 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-[0_0_20px_rgba(0,240,255,0.08)]">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-1 rounded bg-teal-500/10 text-teal-400 border border-teal-500/30">
+            <span className="p-1 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-400/40">
               <Calculator className="w-4 h-4" />
             </span>
-            <h2 className="text-base font-bold text-zinc-100">Pump.fun Bonding Curve Math Engine</h2>
+            <h2 className="text-base font-bold text-white">Pump.fun Bonding Curve Math Engine</h2>
           </div>
           <p className="text-xs text-zinc-400 max-w-2xl">
-            Pump.fun utilizes a constant product AMM formula (<code className="text-emerald-400 font-mono">k = x · y</code>) with <b>30 SOL virtual liquidity</b> and <b>1.073B virtual tokens</b>. When real liquidity reaches <b>~85 SOL ($69k MC)</b>, the curve completes and migrates to Raydium.
+            Pump.fun utilizes a constant product AMM formula (<code className="text-cyan-400 font-mono">k = x · y</code>) with <b>30 SOL virtual liquidity</b> and <b>1.073B virtual tokens</b>. When real liquidity reaches <b>~85 SOL ($69k MC)</b>, the curve completes and migrates to Raydium.
           </p>
         </div>
 
-        <div className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs font-mono text-zinc-300">
-          SOL Price: <strong className="text-emerald-400">${solUsdPrice.toFixed(0)} USD</strong>
+        <div className="px-3 py-1.5 rounded-lg bg-[#030611] border border-cyan-500/30 text-xs font-mono text-zinc-300">
+          SOL Price: <strong className="text-cyan-400">${solUsdPrice.toFixed(0)} USD</strong>
         </div>
       </div>
 
       {/* Interactive Slider & Metrics Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Controls Column */}
-        <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-6 lg:col-span-1">
+        <div className="bg-black border border-cyan-500/30 rounded-2xl p-5 space-y-6 lg:col-span-1 shadow-[0_0_15px_rgba(0,240,255,0.06)]">
           <div>
             <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between mb-2">
               <span>Real SOL Deposited:</span>
-              <span className="text-emerald-400 font-mono text-sm font-bold">
+              <span className="text-cyan-400 font-mono text-sm font-bold">
                 {realSolDeposited.toFixed(1)} SOL
               </span>
             </label>
@@ -89,7 +89,7 @@ export const BondingCurveCalculator: React.FC<BondingCurveCalculatorProps> = ({
               step="0.5"
               value={realSolDeposited}
               onChange={(e) => setRealSolDeposited(parseFloat(e.target.value))}
-              className="w-full accent-emerald-500 h-2 bg-zinc-950 rounded-lg cursor-pointer"
+              className="w-full accent-cyan-400 h-2 bg-[#030611] rounded-lg cursor-pointer"
             />
             <div className="flex justify-between text-[10px] text-zinc-500 font-mono mt-1">
               <span>0 SOL (Launch)</span>

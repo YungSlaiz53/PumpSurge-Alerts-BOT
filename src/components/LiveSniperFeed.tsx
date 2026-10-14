@@ -90,32 +90,32 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Sleek Action Toolbar - The bulky text banner from Requirement 1 has been removed & left invisible */}
-      <div className="bg-zinc-900/95 border border-zinc-800 rounded-2xl p-4 shadow-xl">
+      {/* Sleek Action Toolbar - Neon Blue & Black with Touch of White */}
+      <div className="bg-black border border-cyan-500/30 rounded-2xl p-4 shadow-[0_0_20px_rgba(0,240,255,0.08)]">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Status Heartbeat: 15s Auto-Sync and 24h 00:00 Reset */}
           <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
             <button
               onClick={onToggleAutoSync}
-              className="px-3 py-1.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 flex items-center gap-2 hover:bg-emerald-900/40 transition active:scale-95"
+              className="px-3 py-1.5 rounded-xl bg-cyan-950/60 border border-cyan-400/40 text-cyan-300 flex items-center gap-2 hover:bg-cyan-900/60 transition active:scale-95 shadow-[0_0_10px_rgba(0,240,255,0.2)]"
               title="Toggle 15-second auto-sync"
             >
               <span className="relative flex h-2 w-2">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isAutoSyncActive ? 'bg-emerald-400 opacity-75' : 'bg-zinc-600'}`}></span>
-                <span className={`relative inline-flex rounded-full h-2 w-2 ${isAutoSyncActive ? 'bg-emerald-500' : 'bg-zinc-600'}`}></span>
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isAutoSyncActive ? 'bg-cyan-400 opacity-75' : 'bg-zinc-600'}`}></span>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${isAutoSyncActive ? 'bg-cyan-400' : 'bg-zinc-600'}`}></span>
               </span>
               <span>15s Auto-Sync: <strong>{isAutoSyncActive ? 'ON' : 'PAUSED'}</strong></span>
               {isAutoSyncActive && (
-                <span className="bg-emerald-500/20 text-emerald-200 px-1.5 py-0.5 rounded text-[10px]">
+                <span className="bg-cyan-400 text-black font-bold px-1.5 py-0.5 rounded text-[10px]">
                   {syncCountdownSeconds}s
                 </span>
               )}
             </button>
 
             {timeUntilMidnight && (
-              <div className="px-3 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-400 flex items-center gap-1.5 text-[11px]">
+              <div className="px-3 py-1.5 rounded-xl bg-[#030611] border border-cyan-500/20 text-zinc-300 flex items-center gap-1.5 text-[11px]">
                 <Timer className="w-3.5 h-3.5 text-cyan-400" />
-                <span>00:00 Reset in: {timeUntilMidnight}</span>
+                <span>00:00 Reset in: <strong className="text-white">{timeUntilMidnight}</strong></span>
               </div>
             )}
           </div>
@@ -125,7 +125,7 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
             <button
               onClick={onSyncRealTime}
               disabled={isSyncing}
-              className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow transition active:scale-95 disabled:opacity-50"
+              className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,240,255,0.35)] transition active:scale-95 disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Syncing...' : 'Sync Prices (15s)'}</span>
@@ -133,16 +133,16 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
 
             <button
               onClick={onSimulateNewMint}
-              className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-xs border border-emerald-500/30 flex items-center gap-1.5 transition active:scale-95"
+              className="px-3 py-2 rounded-xl bg-black hover:bg-cyan-950/40 text-cyan-300 font-semibold text-xs border border-cyan-500/30 flex items-center gap-1.5 transition active:scale-95"
             >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
               <span>Simulate Mint</span>
             </button>
 
             {onSimulateDump && (
               <button
                 onClick={() => onSimulateDump()}
-                className="px-3 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 font-semibold text-xs border border-red-500/30 flex items-center gap-1.5 transition active:scale-95"
+                className="px-3 py-2 rounded-xl bg-black hover:bg-red-950/40 text-red-300 font-semibold text-xs border border-red-500/40 flex items-center gap-1.5 transition active:scale-95"
                 title="Simulate token falling below 3x threshold"
               >
                 <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
@@ -152,7 +152,7 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
 
             <button
               onClick={onClearLogsAndCache}
-              className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs border border-zinc-700 flex items-center gap-1.5 transition"
+              className="px-2.5 py-2 rounded-xl bg-black hover:bg-zinc-900 text-zinc-300 text-xs border border-white/20 flex items-center gap-1.5 transition"
               title="Clear all stored logs"
             >
               <Trash2 className="w-3.5 h-3.5 text-rose-400" />
@@ -161,15 +161,15 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
         </div>
 
         {/* Filter Navigation & Search Bar */}
-        <div className="mt-4 pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="mt-4 pt-3 border-t border-cyan-500/20 flex flex-wrap items-center justify-between gap-3 text-xs">
           {/* Category Tabs: Requirement 4: "leave it as New Listings not New Listings (15s)" */}
-          <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 overflow-x-auto max-w-full">
+          <div className="flex items-center gap-1 bg-[#030611] p-1 rounded-xl border border-cyan-500/30 overflow-x-auto max-w-full">
             <button
               onClick={() => setFilterCategory('new_listings')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
                 filterCategory === 'new_listings'
-                  ? 'bg-zinc-800 text-white font-bold shadow'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(0,240,255,0.4)]'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
               New Listings ({tokens.length})
@@ -177,10 +177,10 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
 
             <button
               onClick={() => setFilterCategory('high_buys')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1 whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 whitespace-nowrap ${
                 filterCategory === 'high_buys'
-                  ? 'bg-orange-500 text-zinc-950 font-bold shadow'
-                  : 'text-orange-400 hover:text-orange-300 hover:bg-zinc-900'
+                  ? 'bg-orange-500 text-black shadow'
+                  : 'text-orange-400 hover:text-white'
               }`}
             >
               <TrendingUp className="w-3.5 h-3.5" />
@@ -189,10 +189,10 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
 
             <button
               onClick={() => setFilterCategory('surges')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1 whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 whitespace-nowrap ${
                 filterCategory === 'surges'
-                  ? 'bg-purple-600 text-white font-bold shadow'
-                  : 'text-purple-400 hover:text-purple-300 hover:bg-zinc-900'
+                  ? 'bg-cyan-400 text-black shadow-[0_0_10px_rgba(0,240,255,0.4)]'
+                  : 'text-cyan-300 hover:text-white'
               }`}
             >
               <Flame className="w-3.5 h-3.5" />
@@ -201,10 +201,10 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
 
             <button
               onClick={() => setFilterCategory('dumped')}
-              className={`px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1 whitespace-nowrap ${
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1 whitespace-nowrap ${
                 filterCategory === 'dumped'
-                  ? 'bg-red-600 text-white font-bold shadow'
-                  : 'text-red-400 hover:text-red-300 hover:bg-zinc-900'
+                  ? 'bg-red-600 text-white shadow'
+                  : 'text-red-400 hover:text-white'
               }`}
             >
               <AlertTriangle className="w-3.5 h-3.5" />
@@ -215,13 +215,13 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
           {/* Search Box */}
           <div className="flex items-center gap-2 flex-1 max-w-xs">
             <div className="relative w-full">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-zinc-500" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-cyan-400" />
               <input
                 type="text"
                 placeholder="Search symbol, name, CA..."
                 value={filterQuery}
                 onChange={(e) => setFilterQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
+                className="w-full pl-9 pr-3 py-1.5 bg-[#030611] border border-cyan-500/30 rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400 font-mono"
               />
             </div>
           </div>
@@ -261,14 +261,14 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                 key={token.mint}
                 className={`bg-zinc-900/80 border rounded-2xl p-4 flex flex-col justify-between transition hover:border-zinc-700 relative overflow-hidden group ${
                   isDumped
-                    ? 'border-red-500/60 shadow-lg shadow-red-950/20 bg-gradient-to-b from-red-950/25 to-zinc-900'
+                    ? 'border-red-500/60 shadow-lg shadow-red-950/20 bg-gradient-to-b from-red-950/25 to-black'
                     : is10x
-                    ? 'border-amber-500/50 shadow-lg shadow-amber-950/20 bg-gradient-to-b from-amber-950/20 to-zinc-900'
+                    ? 'border-cyan-400 shadow-[0_0_20px_rgba(0,240,255,0.3)] bg-[#030611]'
                     : is5x
-                    ? 'border-purple-500/50 shadow-lg shadow-purple-950/20 bg-gradient-to-b from-purple-950/20 to-zinc-900'
+                    ? 'border-cyan-500/60 shadow-[0_0_15px_rgba(0,240,255,0.2)] bg-[#030611]'
                     : isHighBuys
-                    ? 'border-orange-500/50 shadow-md shadow-orange-950/20 bg-gradient-to-b from-orange-950/15 to-zinc-900'
-                    : 'border-zinc-800/90'
+                    ? 'border-orange-500/60 shadow-md bg-[#030611]'
+                    : 'bg-black border-white/10 hover:border-cyan-400/40'
                 }`}
               >
                 {/* Badges */}
@@ -278,13 +278,13 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                   </div>
                 )}
                 {is10x && (
-                  <div className="absolute top-0 right-0 px-3 py-1 bg-amber-500 text-zinc-950 font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1 animate-breathe-10x origin-top-right z-10">
-                    <Flame className="w-3 h-3 fill-zinc-950 animate-bounce" /> 10X MOONSHOT
+                  <div className="absolute top-0 right-0 px-3 py-1 bg-cyan-400 text-black font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1 animate-breathe-10x origin-top-right z-10 shadow-[0_0_15px_rgba(0,240,255,0.5)]">
+                    <Flame className="w-3 h-3 fill-black animate-bounce" /> 10X MOONSHOT
                   </div>
                 )}
                 {is5x && (
-                  <div className="absolute top-0 right-0 px-3 py-1 bg-purple-500 text-zinc-950 font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1 animate-breathe-5x origin-top-right z-10">
-                    <Zap className="w-3 h-3 fill-zinc-950" /> 5X SURGE
+                  <div className="absolute top-0 right-0 px-3 py-1 bg-cyan-500 text-black font-black text-[10px] rounded-bl-xl uppercase tracking-wider flex items-center gap-1 animate-breathe-5x origin-top-right z-10 shadow-[0_0_10px_rgba(0,240,255,0.4)]">
+                    <Zap className="w-3 h-3 fill-black" /> 5X SURGE
                   </div>
                 )}
                 {isHighBuys && (
@@ -299,14 +299,14 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                     <div className={`w-10 h-10 rounded-xl border flex items-center justify-center text-lg font-black shrink-0 ${
                       isDumped
                         ? 'bg-red-950/60 border-red-500/40 text-red-400'
-                        : 'bg-zinc-800 border-zinc-700/80 text-emerald-400'
+                        : 'bg-[#060b17] border-cyan-500/40 text-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.2)]'
                     }`}>
                       {token.symbol.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0 pr-16">
                       <div className="flex items-center gap-1.5">
-                        <h3 className="font-bold text-sm text-zinc-100 truncate">{token.name}</h3>
-                        <span className={`text-xs font-mono font-bold shrink-0 ${isDumped ? 'text-red-400' : 'text-emerald-400'}`}>
+                        <h3 className="font-bold text-sm text-white truncate">{token.name}</h3>
+                        <span className={`text-xs font-mono font-bold shrink-0 ${isDumped ? 'text-red-400' : 'text-cyan-400'}`}>
                           ${token.symbol}
                         </span>
                       </div>
