@@ -3,11 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { TrackedToken, TrackedWhaleWallet, WhaleBuyTransaction, TrackedWalletHolding } from '../types';
+import { 
+  TrackedToken, 
+  TrackedWhaleWallet, 
+  WhaleTransaction, 
+  TrackedWalletHolding,
+  WhaleTradeEvent
+} from '../types';
 
-const STORAGE_WALLETS_KEY = 'pumpsurge_whale_wallets_v2';
-const STORAGE_TXS_KEY = 'pumpsurge_whale_txs_v2';
-const STORAGE_DATE_KEY = 'pumpsurge_whale_date_v2';
+const STORAGE_WALLETS_KEY = 'pumpsurge_whale_wallets_v3';
+const STORAGE_TXS_KEY = 'pumpsurge_whale_txs_v3';
+const STORAGE_DATE_KEY = 'pumpsurge_whale_date_v3';
 
 // Realistic sample whale wallets with Solana addresses
 const KNOWN_WHALE_POOLS: Array<{ address: string; label: string }> = [
@@ -23,7 +29,7 @@ const KNOWN_WHALE_POOLS: Array<{ address: string; label: string }> = [
 
 export class WhaleTrackingService {
   private static wallets: Map<string, TrackedWhaleWallet> = new Map();
-  private static transactions: WhaleBuyTransaction[] = [];
+  private static transactions: WhaleTransaction[] = [];
   private static isInitialized = false;
 
   /**
@@ -59,7 +65,7 @@ export class WhaleTrackingService {
 
     // Try loading from localStorage
     let loadedWallets: TrackedWhaleWallet[] = [];
-    let loadedTxs: WhaleBuyTransaction[] = [];
+    let loadedTxs: WhaleTransaction[] = [];
     try {
       const rawW = localStorage.getItem(STORAGE_WALLETS_KEY);
       const rawT = localStorage.getItem(STORAGE_TXS_KEY);
@@ -71,19 +77,56 @@ export class WhaleTrackingService {
 
     if (loadedWallets.length > 0) {
       this.wallets.clear();
-      loadedWallets.forEach((w) => this.wallets.set(w.walletAddress, w));
+      // Hydrate holdings with trade timelines if missing
+      loadedWallets.forEach((w) => {
+        w.totalSellsCountToday = w.totalSellsCountToday || 0;
+        w.totalSolSoldToday = w.totalSolSoldToday || 0;
+        w.netRealizedPnlSol = w.netRealizedPnlSol || 0;
+        w.holdingsToday.forEach((h) => {
+          if (!h.tradeTimeline) {
+            h.tradeTimeline = [];
+            if (h.firstBuyTimeToday) {
+              h.tradeTimeline.push({
+                id: `seed-buy-${h.mint}`,
+                type: 'buy',
+                timestamp: h.firstBuyTimeToday,
+                solAmount: h.totalSolBoughtToday,
+                tokenAmount: h.totalTokensBoughtToday,
+                priceSol: h.averageBuyPriceSol,
+                signature: `tx-${h.mint.slice(0, 8)}`,
+              });
+            }
+          }
+          if (h.remainingTokens === undefined) {
+            h.remainingTokens = Math.max(0, h.totalTokensBoughtToday - (h.totalTokensSoldToday || 0));
+          }
+          if (h.sellCountToday === undefined) {
+            h.sellCountToday = h.firstSellTimeToday ? 1 : 0;
+          }
+          if (h.totalSolSoldToday === undefined) {
+            h.totalSolSoldToday = 0;
+          }
+          if (h.totalTokensSoldToday === undefined) {
+            h.totalTokensSoldToday = 0;
+          }
+          if (h.realizedPnlSol === undefined) {
+            h.realizedPnlSol = 0;
+          }
+        });
+        this.wallets.set(w.walletAddress, w);
+      });
       this.transactions = loadedTxs;
       this.isInitialized = true;
       return;
     }
 
-    // Seed realistic initial whale buys using current or fallback tokens
+    // Seed realistic initial whale buys and sells using current or fallback tokens
     this.seedInitialWhaleData(tokens, solUsdPrice);
     this.isInitialized = true;
   }
 
   /**
-   * Seed realistic initial whale data for the day
+   * Seed realistic initial whale data for the day: including WHEN THEY BOUGHT and WHEN THEY SOLD
    */
   private static seedInitialWhaleData(tokens: TrackedToken[], solUsdPrice: number): void {
     this.wallets.clear();
@@ -130,84 +173,123 @@ export class WhaleTrackingService {
 
     const now = Date.now();
 
-    // Seed 6 distinct wallets with multiple 1+ SOL buys
+    // Setup wallets with realistic Buy and Sell lifecycles
     const sampleSetups = [
       {
-        whale: KNOWN_WHALE_POOLS[0],
-        buys: [
-          { coinIdx: 0, sol: 12.5, timeAgoMs: 25 * 60 * 1000 },
-          { coinIdx: 1, sol: 8.0, timeAgoMs: 18 * 60 * 1000 },
-          { coinIdx: 2, sol: 5.5, timeAgoMs: 10 * 60 * 1000 },
-          { coinIdx: 3, sol: 6.2, timeAgoMs: 4 * 60 * 1000 },
-          { coinIdx: 4, sol: 4.8, timeAgoMs: 1 * 60 * 1000 },
+        whale: KNOWN_WHALE_POOLS[0], // AlphaSniper.sol
+        actions: [
+          // Coin 0 (ZNT): Bought 48m ago, Sold 60% at 20m ago with +120% profit!
+          { type: 'buy', coinIdx: 0, sol: 12.5, timeAgoMs: 48 * 60 * 1000 },
+          { type: 'sell', coinIdx: 0, sellRatio: 0.6, timeAgoMs: 20 * 60 * 1000, mult: 2.2 },
+          // Coin 1 (PEPE): Bought 22m ago, still holding
+          { type: 'buy', coinIdx: 1, sol: 8.0, timeAgoMs: 22 * 60 * 1000 },
+          // Coin 2 (BONKS): Bought 12m ago, sold 100% at 4m ago with +85% profit!
+          { type: 'buy', coinIdx: 2, sol: 5.5, timeAgoMs: 12 * 60 * 1000 },
+          { type: 'sell', coinIdx: 2, sellRatio: 1.0, timeAgoMs: 4 * 60 * 1000, mult: 1.85 },
+          // Coin 3 (FART): Bought 3m ago, still holding
+          { type: 'buy', coinIdx: 3, sol: 4.8, timeAgoMs: 3 * 60 * 1000 },
         ],
       },
       {
-        whale: KNOWN_WHALE_POOLS[1],
-        buys: [
-          { coinIdx: 0, sol: 15.0, timeAgoMs: 45 * 60 * 1000 },
-          { coinIdx: 2, sol: 9.2, timeAgoMs: 32 * 60 * 1000 },
-          { coinIdx: 3, sol: 7.4, timeAgoMs: 14 * 60 * 1000 },
-          { coinIdx: 1, sol: 3.5, timeAgoMs: 6 * 60 * 1000 },
+        whale: KNOWN_WHALE_POOLS[1], // Whale_01 (Raydium Alpha)
+        actions: [
+          // Coin 0: Bought 65m ago, Sold 100% 30m ago with 3.4x return
+          { type: 'buy', coinIdx: 0, sol: 15.0, timeAgoMs: 65 * 60 * 1000 },
+          { type: 'sell', coinIdx: 0, sellRatio: 1.0, timeAgoMs: 30 * 60 * 1000, mult: 3.4 },
+          // Coin 2: Bought 35m ago, Sold 40% 15m ago
+          { type: 'buy', coinIdx: 2, sol: 9.2, timeAgoMs: 35 * 60 * 1000 },
+          { type: 'sell', coinIdx: 2, sellRatio: 0.4, timeAgoMs: 15 * 60 * 1000, mult: 1.6 },
+          // Coin 4: Bought 8m ago, holding
+          { type: 'buy', coinIdx: 4, sol: 6.4, timeAgoMs: 8 * 60 * 1000 },
         ],
       },
       {
-        whale: KNOWN_WHALE_POOLS[2],
-        buys: [
-          { coinIdx: 4, sol: 6.5, timeAgoMs: 50 * 60 * 1000 },
-          { coinIdx: 1, sol: 4.2, timeAgoMs: 22 * 60 * 1000 },
-          { coinIdx: 0, sol: 3.8, timeAgoMs: 11 * 60 * 1000 },
+        whale: KNOWN_WHALE_POOLS[2], // BondingCurveTitan
+        actions: [
+          // Coin 4: Bought 55m ago, sold 50% 25m ago
+          { type: 'buy', coinIdx: 4, sol: 6.5, timeAgoMs: 55 * 60 * 1000 },
+          { type: 'sell', coinIdx: 4, sellRatio: 0.5, timeAgoMs: 25 * 60 * 1000, mult: 1.9 },
+          // Coin 1: Bought 18m ago, holding
+          { type: 'buy', coinIdx: 1, sol: 4.2, timeAgoMs: 18 * 60 * 1000 },
+          // Coin 3: Bought 6m ago, holding
+          { type: 'buy', coinIdx: 3, sol: 3.8, timeAgoMs: 6 * 60 * 1000 },
         ],
       },
       {
-        whale: KNOWN_WHALE_POOLS[3],
-        buys: [
-          { coinIdx: 3, sol: 10.0, timeAgoMs: 30 * 60 * 1000 },
-          { coinIdx: 0, sol: 4.5, timeAgoMs: 15 * 60 * 1000 },
+        whale: KNOWN_WHALE_POOLS[3], // DegenChad.sol
+        actions: [
+          // Coin 3: Bought 40m ago, sold 100% 12m ago
+          { type: 'buy', coinIdx: 3, sol: 10.0, timeAgoMs: 40 * 60 * 1000 },
+          { type: 'sell', coinIdx: 3, sellRatio: 1.0, timeAgoMs: 12 * 60 * 1000, mult: 2.1 },
+          // Coin 0: Bought 14m ago, holding
+          { type: 'buy', coinIdx: 0, sol: 4.5, timeAgoMs: 14 * 60 * 1000 },
         ],
       },
       {
-        whale: KNOWN_WHALE_POOLS[4],
-        buys: [
-          { coinIdx: 1, sol: 8.5, timeAgoMs: 60 * 60 * 1000 },
-          { coinIdx: 2, sol: 5.0, timeAgoMs: 35 * 60 * 1000 },
-          { coinIdx: 4, sol: 4.0, timeAgoMs: 8 * 60 * 1000 },
-          { coinIdx: 0, sol: 2.2, timeAgoMs: 2 * 60 * 1000 },
+        whale: KNOWN_WHALE_POOLS[4], // SmartAccumulator
+        actions: [
+          // Coin 1: Bought 75m ago, sold 70% 35m ago
+          { type: 'buy', coinIdx: 1, sol: 8.5, timeAgoMs: 75 * 60 * 1000 },
+          { type: 'sell', coinIdx: 1, sellRatio: 0.7, timeAgoMs: 35 * 60 * 1000, mult: 1.75 },
+          // Coin 2: Bought 25m ago, holding
+          { type: 'buy', coinIdx: 2, sol: 5.0, timeAgoMs: 25 * 60 * 1000 },
+          // Coin 4: Bought 9m ago, holding
+          { type: 'buy', coinIdx: 4, sol: 4.0, timeAgoMs: 9 * 60 * 1000 },
         ],
       },
       {
-        whale: KNOWN_WHALE_POOLS[5],
-        buys: [
-          { coinIdx: 2, sol: 3.5, timeAgoMs: 40 * 60 * 1000 },
-          { coinIdx: 3, sol: 2.1, timeAgoMs: 12 * 60 * 1000 },
+        whale: KNOWN_WHALE_POOLS[6], // PumpFunMaxi
+        actions: [
+          // Coin 2: Bought 50m ago, sold 100% 10m ago
+          { type: 'buy', coinIdx: 2, sol: 7.2, timeAgoMs: 50 * 60 * 1000 },
+          { type: 'sell', coinIdx: 2, sellRatio: 1.0, timeAgoMs: 10 * 60 * 1000, mult: 2.5 },
+          // Coin 3: Bought 5m ago, holding
+          { type: 'buy', coinIdx: 3, sol: 3.5, timeAgoMs: 5 * 60 * 1000 },
         ],
       },
     ];
 
     sampleSetups.forEach((setup) => {
-      setup.buys.forEach((b) => {
-        const coin = coinPool[b.coinIdx % coinPool.length];
-        const priceSol = coin.currentPriceSol || 0.0000002;
-        const tokensBought = Math.round((b.sol / priceSol) * 0.98); // bonding curve slip
-        const txTimestamp = now - b.timeAgoMs;
-        const sig = `${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}pump5sol`;
+      setup.actions.forEach((act) => {
+        const coin = coinPool[act.coinIdx % coinPool.length];
+        const basePrice = coin.currentPriceSol || 0.0000002;
+        const txTimestamp = now - act.timeAgoMs;
+        const sig = `${Math.random().toString(36).substring(2, 9)}${Math.random().toString(36).substring(2, 9)}pump`;
 
-        this.recordWhaleBuyInternal({
-          signature: sig,
-          timestamp: txTimestamp,
-          walletAddress: setup.whale.address,
-          walletLabel: setup.whale.label,
-          mint: coin.mint,
-          tokenSymbol: coin.symbol,
-          tokenName: coin.name,
-          solAmount: b.sol,
-          solUsdValue: b.sol * solUsdPrice,
-          tokenAmount: tokensBought,
-          priceSol,
-          priceUsd: priceSol * solUsdPrice,
-          currentMultiplier: coin.highestMultiplier || 1.2,
-          holdingStatus: 'holding',
-        });
+        if (act.type === 'buy') {
+          const solAmount = act.sol || 1.5;
+          const tokensBought = Math.round((solAmount / basePrice) * 0.98);
+
+          this.recordWhaleBuyInternal({
+            signature: sig,
+            timestamp: txTimestamp,
+            walletAddress: setup.whale.address,
+            walletLabel: setup.whale.label,
+            mint: coin.mint,
+            tokenSymbol: coin.symbol,
+            tokenName: coin.name,
+            solAmount,
+            solUsdValue: solAmount * solUsdPrice,
+            tokenAmount: tokensBought,
+            priceSol: basePrice,
+            priceUsd: basePrice * solUsdPrice,
+            currentMultiplier: coin.highestMultiplier || 1.3,
+            holdingStatus: 'holding',
+          });
+        } else if (act.type === 'sell') {
+          this.recordWhaleSellInternal({
+            walletAddress: setup.whale.address,
+            walletLabel: setup.whale.label,
+            mint: coin.mint,
+            tokenSymbol: coin.symbol,
+            tokenName: coin.name,
+            sellRatio: act.sellRatio || 0.5,
+            multiplierAtSell: act.mult || 1.8,
+            timestamp: txTimestamp,
+            signature: sig,
+            solUsdPrice,
+          });
+        }
       });
     });
 
@@ -217,10 +299,11 @@ export class WhaleTrackingService {
   /**
    * Internal recorder of a >= 1.0 SOL buy transaction
    */
-  private static recordWhaleBuyInternal(txData: Omit<WhaleBuyTransaction, 'id'>): WhaleBuyTransaction {
+  private static recordWhaleBuyInternal(txData: Omit<WhaleTransaction, 'id' | 'type'>): WhaleTransaction {
     const id = `wb-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const tx: WhaleBuyTransaction = {
+    const tx: WhaleTransaction = {
       id,
+      type: 'buy',
       ...txData,
     };
 
@@ -239,8 +322,11 @@ export class WhaleTrackingService {
         firstActiveToday: tx.timestamp,
         lastActiveToday: tx.timestamp,
         totalBuysCountToday: 0,
+        totalSellsCountToday: 0,
         uniqueCoinsBoughtCountToday: 0,
         totalSolSpentToday: 0,
+        totalSolSoldToday: 0,
+        netRealizedPnlSol: 0,
         holdingsToday: [],
         transactionsToday: [],
         tier: 'Active Whale (1+ SOL)',
@@ -256,10 +342,11 @@ export class WhaleTrackingService {
     wallet.transactionsToday.unshift(tx);
 
     // Update holdings breakdown for this coin
-    const existingHolding = wallet.holdingsToday.find((h) => h.mint === tx.mint);
+    let existingHolding = wallet.holdingsToday.find((h) => h.mint === tx.mint);
     if (existingHolding) {
       existingHolding.totalSolBoughtToday = +(existingHolding.totalSolBoughtToday + tx.solAmount).toFixed(3);
       existingHolding.totalTokensBoughtToday += tx.tokenAmount;
+      existingHolding.remainingTokens += tx.tokenAmount;
       existingHolding.lastBuyTimeToday = tx.timestamp;
       existingHolding.buyCountToday += 1;
       // Weighted average buy price
@@ -268,23 +355,64 @@ export class WhaleTrackingService {
       existingHolding.currentMultiplier = tx.currentMultiplier || existingHolding.currentMultiplier;
       existingHolding.unrealizedPnlPercent = Math.round((existingHolding.currentMultiplier - 1) * 100);
       existingHolding.unrealizedPnlSol = +(existingHolding.totalSolBoughtToday * (existingHolding.currentMultiplier - 1)).toFixed(3);
+
+      if (existingHolding.holdingStatus === 'sold' && existingHolding.remainingTokens > 0) {
+        existingHolding.holdingStatus = 'holding';
+      }
+
+      // Add to trade timeline
+      existingHolding.tradeTimeline.push({
+        id: tx.id,
+        type: 'buy',
+        timestamp: tx.timestamp,
+        solAmount: tx.solAmount,
+        tokenAmount: tx.tokenAmount,
+        priceSol: tx.priceSol,
+        signature: tx.signature,
+      });
     } else {
-      wallet.holdingsToday.push({
+      const newHolding: TrackedWalletHolding = {
         mint: tx.mint,
         tokenSymbol: tx.tokenSymbol,
         tokenName: tx.tokenName,
-        totalSolBoughtToday: +tx.solAmount.toFixed(3),
-        totalTokensBoughtToday: tx.tokenAmount,
+        // BUY Timestamps
         firstBuyTimeToday: tx.timestamp,
         lastBuyTimeToday: tx.timestamp,
         buyCountToday: 1,
+        totalSolBoughtToday: +tx.solAmount.toFixed(3),
+        totalTokensBoughtToday: tx.tokenAmount,
         averageBuyPriceSol: tx.priceSol,
+
+        // SELL Timestamps (initially none)
+        firstSellTimeToday: undefined,
+        lastSellTimeToday: undefined,
+        sellCountToday: 0,
+        totalSolSoldToday: 0,
+        totalTokensSoldToday: 0,
+        remainingTokens: tx.tokenAmount,
+        realizedPnlSol: 0,
+
+        // Valuation
         currentPriceSol: tx.priceSol,
         currentMultiplier: tx.currentMultiplier || 1.0,
         unrealizedPnlSol: 0,
         unrealizedPnlPercent: 0,
         holdingStatus: 'holding',
-      });
+
+        // Chronological order timeline
+        tradeTimeline: [
+          {
+            id: tx.id,
+            type: 'buy',
+            timestamp: tx.timestamp,
+            solAmount: tx.solAmount,
+            tokenAmount: tx.tokenAmount,
+            priceSol: tx.priceSol,
+            signature: tx.signature,
+          },
+        ],
+      };
+      wallet.holdingsToday.push(newHolding);
     }
 
     wallet.uniqueCoinsBoughtCountToday = wallet.holdingsToday.length;
@@ -302,11 +430,120 @@ export class WhaleTrackingService {
   }
 
   /**
+   * Internal recorder of a Whale Sell transaction (capturing WHEN they sell and how much profit)
+   */
+  private static recordWhaleSellInternal(options: {
+    walletAddress: string;
+    walletLabel?: string;
+    mint: string;
+    tokenSymbol?: string;
+    tokenName?: string;
+    sellRatio?: number; // 0.1 to 1.0 (e.g. 0.5 for 50%, 1.0 for 100%)
+    exactTokenAmount?: number;
+    multiplierAtSell?: number;
+    timestamp?: number;
+    signature?: string;
+    solUsdPrice?: number;
+  }): WhaleTransaction | null {
+    const wallet = this.wallets.get(options.walletAddress);
+    if (!wallet) return null;
+
+    const holding = wallet.holdingsToday.find((h) => h.mint === options.mint);
+    if (!holding || holding.remainingTokens <= 0) return null;
+
+    const timestamp = options.timestamp || Date.now();
+    const usdRate = options.solUsdPrice || 150;
+    const ratio = options.sellRatio ? Math.min(1.0, Math.max(0.1, options.sellRatio)) : 1.0;
+
+    const tokensToSell = options.exactTokenAmount
+      ? Math.min(holding.remainingTokens, options.exactTokenAmount)
+      : Math.round(holding.remainingTokens * ratio);
+
+    if (tokensToSell <= 0) return null;
+
+    const multiplier = options.multiplierAtSell || holding.currentMultiplier || 1.5;
+    const sellPriceSol = holding.averageBuyPriceSol * multiplier;
+    const solReceived = +(tokensToSell * sellPriceSol).toFixed(3);
+    const costBasisSol = +(tokensToSell * holding.averageBuyPriceSol).toFixed(3);
+    const profitSol = +(solReceived - costBasisSol).toFixed(3);
+    const pnlPercent = Math.round(((sellPriceSol - holding.averageBuyPriceSol) / holding.averageBuyPriceSol) * 100);
+
+    const sig = options.signature || `${Math.random().toString(36).substring(2, 9)}${Math.random().toString(36).substring(2, 9)}pumpSell`;
+    const id = `ws-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+    // Update holding sell fields
+    holding.remainingTokens = Math.max(0, holding.remainingTokens - tokensToSell);
+    holding.totalTokensSoldToday += tokensToSell;
+    holding.totalSolSoldToday = +(holding.totalSolSoldToday + solReceived).toFixed(3);
+    holding.sellCountToday += 1;
+    holding.firstSellTimeToday = holding.firstSellTimeToday || timestamp;
+    holding.lastSellTimeToday = timestamp;
+    holding.realizedPnlSol = +(holding.realizedPnlSol + profitSol).toFixed(3);
+
+    // Holding Status update
+    if (holding.remainingTokens <= 0) {
+      holding.holdingStatus = 'sold';
+    } else {
+      holding.holdingStatus = 'partially_sold';
+    }
+
+    const tradeEvent: WhaleTradeEvent = {
+      id,
+      type: 'sell',
+      timestamp,
+      solAmount: solReceived,
+      tokenAmount: tokensToSell,
+      priceSol: sellPriceSol,
+      signature: sig,
+      profitSol,
+      pnlPercent,
+    };
+    holding.tradeTimeline.push(tradeEvent);
+
+    const tx: WhaleTransaction = {
+      id,
+      type: 'sell',
+      signature: sig,
+      timestamp,
+      walletAddress: wallet.walletAddress,
+      walletLabel: wallet.label || options.walletLabel,
+      mint: holding.mint,
+      tokenSymbol: holding.tokenSymbol,
+      tokenName: holding.tokenName,
+      solAmount: solReceived,
+      solUsdValue: solReceived * usdRate,
+      tokenAmount: tokensToSell,
+      priceSol: sellPriceSol,
+      priceUsd: sellPriceSol * usdRate,
+      currentMultiplier: multiplier,
+      realizedProfitSol: profitSol,
+      realizedPnlPercent: pnlPercent,
+      initialBuyTimestamp: holding.firstBuyTimeToday,
+      holdDurationMs: Math.max(0, timestamp - holding.firstBuyTimeToday),
+      holdingStatus: holding.holdingStatus,
+    };
+
+    // Update wallet stats
+    wallet.lastActiveToday = Math.max(wallet.lastActiveToday, timestamp);
+    wallet.totalSellsCountToday = (wallet.totalSellsCountToday || 0) + 1;
+    wallet.totalSolSoldToday = +((wallet.totalSolSoldToday || 0) + solReceived).toFixed(3);
+    wallet.netRealizedPnlSol = +((wallet.netRealizedPnlSol || 0) + profitSol).toFixed(3);
+    wallet.transactionsToday.unshift(tx);
+
+    // Add to global transactions list
+    this.transactions.unshift(tx);
+    if (this.transactions.length > 500) {
+      this.transactions.pop();
+    }
+
+    return tx;
+  }
+
+  /**
    * Public API to record a 1+ SOL Whale Buy
    */
-  public static recordWhaleBuy(txData: Omit<WhaleBuyTransaction, 'id'>): WhaleBuyTransaction | null {
+  public static recordWhaleBuy(txData: Omit<WhaleTransaction, 'id' | 'type'>): WhaleTransaction | null {
     if (txData.solAmount < 1.0) {
-      // Must be 1 SOL and above
       return null;
     }
 
@@ -316,15 +553,30 @@ export class WhaleTrackingService {
   }
 
   /**
+   * Public API to record a Whale Sell
+   */
+  public static recordWhaleSell(options: {
+    walletAddress: string;
+    mint: string;
+    sellRatio?: number;
+    exactTokenAmount?: number;
+    solUsdPrice?: number;
+  }): WhaleTransaction | null {
+    const tx = this.recordWhaleSellInternal(options);
+    if (tx) {
+      this.persist();
+    }
+    return tx;
+  }
+
+  /**
    * Generates a realistic live whale buy with >= 1.0 SOL from active tokens
    */
-  public static simulateRandomWhaleBuy(tokens: TrackedToken[], solUsdPrice: number = 150): WhaleBuyTransaction | null {
+  public static simulateRandomWhaleBuy(tokens: TrackedToken[], solUsdPrice: number = 150): WhaleTransaction | null {
     if (tokens.length === 0) return null;
 
-    // Pick a random token from the active list
     const token = tokens[Math.floor(Math.random() * tokens.length)];
 
-    // Pick an existing whale or generate a new random Solana wallet
     const useKnown = Math.random() > 0.35;
     let walletAddress: string;
     let walletLabel: string | undefined;
@@ -338,7 +590,6 @@ export class WhaleTrackingService {
       walletLabel = `Whale_${Math.floor(Math.random() * 900 + 100)}`;
     }
 
-    // Generate SOL buy amount >= 1.0 SOL (between 1.0 and 18.5 SOL)
     const solDistribution = Math.random();
     let solAmount = 1.0;
     if (solDistribution > 0.85) {
@@ -373,6 +624,73 @@ export class WhaleTrackingService {
     });
 
     this.persist();
+    return tx;
+  }
+
+  /**
+   * Simulates a live Whale Sell (when they sell the coin)
+   */
+  public static simulateRandomWhaleSell(tokens: TrackedToken[] = [], solUsdPrice: number = 150): WhaleTransaction | null {
+    // Find all wallets that currently have an active holding (not 100% sold)
+    const eligibleWallets = Array.from(this.wallets.values()).filter((w) =>
+      w.holdingsToday.some((h) => h.remainingTokens > 0)
+    );
+
+    if (eligibleWallets.length === 0) return null;
+
+    // Pick a random wallet
+    const wallet = eligibleWallets[Math.floor(Math.random() * eligibleWallets.length)];
+    const activeHoldings = wallet.holdingsToday.filter((h) => h.remainingTokens > 0);
+    if (activeHoldings.length === 0) return null;
+
+    const holding = activeHoldings[Math.floor(Math.random() * activeHoldings.length)];
+
+    // Check if token exists in live list for real price
+    const liveToken = tokens.find((t) => t.mint === holding.mint);
+    const multiplier = liveToken?.highestMultiplier || holding.currentMultiplier || 1.85;
+
+    // Sell either 50% or 100%
+    const isFullSell = Math.random() > 0.45;
+    const sellRatio = isFullSell ? 1.0 : +(Math.random() * 0.4 + 0.3).toFixed(2); // 30% - 70% or 100%
+
+    const tx = this.recordWhaleSellInternal({
+      walletAddress: wallet.walletAddress,
+      walletLabel: wallet.label,
+      mint: holding.mint,
+      tokenSymbol: holding.tokenSymbol,
+      tokenName: holding.tokenName,
+      sellRatio,
+      multiplierAtSell: multiplier,
+      timestamp: Date.now(),
+      solUsdPrice,
+    });
+
+    if (tx) {
+      this.persist();
+    }
+    return tx;
+  }
+
+  /**
+   * Simulates a sell for a specific holding directly (triggered by user button in UI)
+   */
+  public static simulateSellForSpecificHolding(
+    walletAddress: string,
+    mint: string,
+    sellRatio: number = 1.0,
+    solUsdPrice: number = 150
+  ): WhaleTransaction | null {
+    const tx = this.recordWhaleSellInternal({
+      walletAddress,
+      mint,
+      sellRatio,
+      timestamp: Date.now(),
+      solUsdPrice,
+    });
+
+    if (tx) {
+      this.persist();
+    }
     return tx;
   }
 
@@ -422,9 +740,9 @@ export class WhaleTrackingService {
   }
 
   /**
-   * Returns recent 1+ SOL whale transactions
+   * Returns recent 1+ SOL whale transactions (buys and sells)
    */
-  public static getTransactions(): WhaleBuyTransaction[] {
+  public static getTransactions(): WhaleTransaction[] {
     return [...this.transactions];
   }
 
@@ -434,23 +752,29 @@ export class WhaleTrackingService {
   public static getSummaryStats(solUsdPrice: number = 150): {
     totalWalletsCount: number;
     totalSolDeployedToday: number;
+    totalSolSoldToday: number;
+    netRealizedPnlSol: number;
     totalUsdDeployedToday: number;
     totalBuysCountToday: number;
+    totalSellsCountToday: number;
     topWhale: TrackedWhaleWallet | null;
     mostBoughtCoinSymbol: string;
   } {
     const wallets = Array.from(this.wallets.values());
     const totalWalletsCount = wallets.length;
     const totalSolDeployedToday = +wallets.reduce((acc, w) => acc + w.totalSolSpentToday, 0).toFixed(2);
+    const totalSolSoldToday = +wallets.reduce((acc, w) => acc + (w.totalSolSoldToday || 0), 0).toFixed(2);
+    const netRealizedPnlSol = +wallets.reduce((acc, w) => acc + (w.netRealizedPnlSol || 0), 0).toFixed(2);
     const totalUsdDeployedToday = Math.round(totalSolDeployedToday * solUsdPrice);
     const totalBuysCountToday = wallets.reduce((acc, w) => acc + w.totalBuysCountToday, 0);
+    const totalSellsCountToday = wallets.reduce((acc, w) => acc + (w.totalSellsCountToday || 0), 0);
 
     const sortedBySol = [...wallets].sort((a, b) => b.totalSolSpentToday - a.totalSolSpentToday);
     const topWhale = sortedBySol.length > 0 ? sortedBySol[0] : null;
 
     // Find most bought coin
     const coinBuyCount = new Map<string, number>();
-    this.transactions.forEach((tx) => {
+    this.transactions.filter((t) => t.type === 'buy').forEach((tx) => {
       coinBuyCount.set(tx.tokenSymbol, (coinBuyCount.get(tx.tokenSymbol) || 0) + 1);
     });
     let mostBoughtCoinSymbol = 'PUMP';
@@ -465,8 +789,11 @@ export class WhaleTrackingService {
     return {
       totalWalletsCount,
       totalSolDeployedToday,
+      totalSolSoldToday,
+      netRealizedPnlSol,
       totalUsdDeployedToday,
       totalBuysCountToday,
+      totalSellsCountToday,
       topWhale,
       mostBoughtCoinSymbol,
     };

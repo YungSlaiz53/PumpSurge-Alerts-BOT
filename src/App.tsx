@@ -14,7 +14,7 @@ import { BondingCurveCalculator } from './components/BondingCurveCalculator';
 import { WhaleTrackingDashboard } from './components/WhaleTrackingDashboard';
 import { AuthModal } from './components/AuthModal';
 import { NotificationCenter, AppNotification } from './components/NotificationCenter';
-import { TrackedToken, LogEntry, TrackedWhaleWallet, WhaleBuyTransaction } from './types';
+import { TrackedToken, LogEntry, TrackedWhaleWallet, WhaleTransaction, WhaleBuyTransaction } from './types';
 import { PumpSyncService } from './services/pumpSyncService';
 import { WhaleTrackingService } from './services/whaleTrackingService';
 import { AuthService, AuthUser, ADMIN_USERNAME } from './services/authService';
@@ -30,7 +30,7 @@ export default function App() {
 
   // 1+ SOL Whale Radar & Wallet Tracker State (Requirements 1, 2, 3)
   const [whaleWallets, setWhaleWallets] = useState<TrackedWhaleWallet[]>([]);
-  const [whaleTransactions, setWhaleTransactions] = useState<WhaleBuyTransaction[]>([]);
+  const [whaleTransactions, setWhaleTransactions] = useState<WhaleTransaction[]>([]);
   
   // Site Customizer State (Admin controlled)
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(() => SiteConfigService.getConfig());
@@ -234,6 +234,25 @@ export default function App() {
             ]);
           }
         }
+
+        // Periodically capture whale sells / profit taking
+        if (Math.random() > 0.65) {
+          const sellTx = WhaleTrackingService.simulateRandomWhaleSell(result.tokens, solUsdPrice);
+          if (sellTx) {
+            const pnlText = (sellTx.realizedProfitSol || 0) >= 0 
+              ? `+${sellTx.realizedProfitSol} SOL (+${sellTx.realizedPnlPercent}%)`
+              : `${sellTx.realizedProfitSol} SOL (${sellTx.realizedPnlPercent}%)`;
+            setLogs((prev) => [
+              PumpSyncService.createLog(
+                'warn',
+                'WHALE SELL EVENT',
+                `🔴 Whale Sold: ${sellTx.walletLabel || sellTx.walletAddress.slice(0, 6)} sold ${sellTx.solAmount} SOL of $${sellTx.tokenSymbol} (${pnlText})! Status: ${sellTx.holdingStatus}`
+              ),
+              ...prev,
+            ]);
+          }
+        }
+
         setWhaleWallets(WhaleTrackingService.getTrackedWallets());
         setWhaleTransactions(WhaleTrackingService.getTransactions());
       }
@@ -499,6 +518,48 @@ export default function App() {
       AuthService.sendDesktopNotification(
         '🐋 1+ SOL Whale Buy Detected!',
         `${tx.solAmount} SOL bought on $${tx.tokenSymbol} by ${tx.walletLabel || tx.walletAddress.slice(0, 8)}!`
+      );
+    }
+  };
+
+  // Handler to simulate Whale Sell (Requirement: Show when they bought and when they sell)
+  const handleTriggerSimulateWhaleSell = () => {
+    const tx = WhaleTrackingService.simulateRandomWhaleSell(tokens, solUsdPrice);
+    if (tx) {
+      setWhaleWallets(WhaleTrackingService.getTrackedWallets());
+      setWhaleTransactions(WhaleTrackingService.getTransactions());
+      playSurgeAudio('high_buys');
+
+      const isProfit = (tx.realizedProfitSol || 0) >= 0;
+      const profitText = isProfit 
+        ? `+${tx.realizedProfitSol} SOL profit (+${tx.realizedPnlPercent}%)` 
+        : `${tx.realizedProfitSol} SOL loss (${tx.realizedPnlPercent}%)`;
+
+      const whaleLog = PumpSyncService.createLog(
+        'warn',
+        'WHALE SELL EVENT',
+        `🔴 Whale Sell: ${tx.walletLabel || tx.walletAddress.slice(0, 6)} sold ${tx.solAmount} SOL of $${tx.tokenSymbol} (${profitText})! Status: ${tx.holdingStatus}`,
+        { wallet: tx.walletAddress, solAmount: tx.solAmount, mint: tx.mint, profitSol: tx.realizedProfitSol }
+      );
+      setLogs((p) => [whaleLog, ...p]);
+
+      const notif: AppNotification = {
+        id: `notif-whale-sell-${Date.now()}`,
+        type: 'coin_dumping',
+        title: '🔴 Whale Sold Coin!',
+        message: `${tx.walletLabel || `${tx.walletAddress.slice(0, 6)}...`} sold ${tx.solAmount} SOL of ${tx.tokenName} ($${tx.tokenSymbol}) with ${profitText}!`,
+        mint: tx.mint,
+        name: tx.tokenName,
+        symbol: tx.tokenSymbol,
+        multiplier: tx.currentMultiplier || 1.0,
+        marketCapUsd: tx.solUsdValue * 120,
+        timestamp: Date.now(),
+      };
+      setNotifications((n) => [notif, ...n]);
+
+      AuthService.sendDesktopNotification(
+        '🔴 Whale Sold Coin!',
+        `${tx.walletLabel || tx.walletAddress.slice(0, 8)} sold ${tx.solAmount} SOL of $${tx.tokenSymbol} (${profitText})!`
       );
     }
   };
@@ -907,6 +968,7 @@ export default function App() {
             solUsdPrice={solUsdPrice}
             tokens={tokens}
             onTriggerSimulateBuy={handleTriggerSimulateWhaleBuy}
+            onTriggerSimulateSell={handleTriggerSimulateWhaleSell}
             onRefresh={() => {
               setWhaleWallets(WhaleTrackingService.getTrackedWallets());
               setWhaleTransactions(WhaleTrackingService.getTransactions());

@@ -11,28 +11,34 @@ import {
   Check, 
   Star, 
   TrendingUp, 
+  TrendingDown,
   Zap, 
   Search, 
-  Filter, 
   RefreshCw, 
   Coins, 
   ChevronDown, 
   ChevronUp, 
-  ShieldAlert, 
   Clock, 
   ArrowUpRight,
+  ArrowDownRight,
   Flame,
-  CheckCircle2
+  CheckCircle2,
+  Calendar,
+  Layers,
+  History,
+  ShieldCheck,
+  Percent
 } from 'lucide-react';
-import { TrackedWhaleWallet, WhaleBuyTransaction, TrackedWalletHolding, TrackedToken } from '../types';
+import { TrackedWhaleWallet, WhaleTransaction, TrackedWalletHolding, TrackedToken, WhaleTradeEvent } from '../types';
 import { WhaleTrackingService } from '../services/whaleTrackingService';
 
 interface WhaleTrackingDashboardProps {
   wallets: TrackedWhaleWallet[];
-  transactions: WhaleBuyTransaction[];
+  transactions: WhaleTransaction[];
   solUsdPrice: number;
   tokens: TrackedToken[];
   onTriggerSimulateBuy?: () => void;
+  onTriggerSimulateSell?: () => void;
   onRefresh?: () => void;
 }
 
@@ -42,15 +48,18 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
   solUsdPrice,
   tokens,
   onTriggerSimulateBuy,
+  onTriggerSimulateSell,
   onRefresh,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'wallets' | 'stream'>('wallets');
+  const [streamFilter, setStreamFilter] = useState<'all' | 'buys' | 'sells'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [minSolFilter, setMinSolFilter] = useState<number>(1.0);
   const [expandedWalletAddress, setExpandedWalletAddress] = useState<string | null>(null);
+  const [expandedTimelineMint, setExpandedTimelineMint] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [onlyStarred, setOnlyStarred] = useState(false);
-  const [sortBy, setSortBy] = useState<'sol' | 'coins' | 'recent'>('sol');
+  const [sortBy, setSortBy] = useState<'sol' | 'coins' | 'recent' | 'pnl'>('sol');
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -64,14 +73,49 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
     if (onRefresh) onRefresh();
   };
 
+  const handleManualSellHolding = (walletAddress: string, mint: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    WhaleTrackingService.simulateSellForSpecificHolding(walletAddress, mint, 1.0, solUsdPrice);
+    if (onRefresh) onRefresh();
+  };
+
+  // Helper to format exact date, time, and relative duration
+  const formatTimeDetails = (timestamp: number) => {
+    const d = new Date(timestamp);
+    const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const timeStr = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const diffSec = Math.floor((Date.now() - timestamp) / 1000);
+
+    let relativeStr = '';
+    if (diffSec < 10) {
+      relativeStr = 'just now';
+    } else if (diffSec < 60) {
+      relativeStr = `${diffSec}s ago`;
+    } else if (diffSec < 3600) {
+      relativeStr = `${Math.floor(diffSec / 60)}m ago`;
+    } else {
+      relativeStr = `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m ago`;
+    }
+
+    return { dateStr, timeStr, relativeStr, full: `${dateStr} ${timeStr}` };
+  };
+
+  // Helper to format duration between buy and sell
+  const formatDuration = (startMs: number, endMs: number) => {
+    const diffSec = Math.max(1, Math.floor((endMs - startMs) / 1000));
+    if (diffSec < 60) return `${diffSec}s`;
+    const mins = Math.floor(diffSec / 60);
+    const secs = diffSec % 60;
+    if (mins < 60) return `${mins}m ${secs}s`;
+    const hours = Math.floor(mins / 60);
+    return `${hours}h ${mins % 60}m`;
+  };
+
   // Filtered & sorted wallets
   const filteredWallets = useMemo(() => {
     return wallets.filter((wallet) => {
-      // Min SOL filter
       if (wallet.totalSolSpentToday < minSolFilter) return false;
-      // Starred filter
       if (onlyStarred && !wallet.isStarred) return false;
-      // Search query (wallet address, label, or token symbols)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesAddress = wallet.walletAddress.toLowerCase().includes(q);
@@ -90,15 +134,19 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
         return b.totalSolSpentToday - a.totalSolSpentToday;
       } else if (sortBy === 'coins') {
         return b.uniqueCoinsBoughtCountToday - a.uniqueCoinsBoughtCountToday;
+      } else if (sortBy === 'pnl') {
+        return (b.netRealizedPnlSol || 0) - (a.netRealizedPnlSol || 0);
       } else {
         return b.lastActiveToday - a.lastActiveToday;
       }
     });
   }, [wallets, minSolFilter, onlyStarred, searchQuery, sortBy]);
 
-  // Filtered transactions for the live stream
+  // Filtered transactions for the live stream (buys and sells)
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {
+      if (streamFilter === 'buys' && tx.type !== 'buy') return false;
+      if (streamFilter === 'sells' && tx.type !== 'sell') return false;
       if (tx.solAmount < minSolFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -109,29 +157,17 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
       }
       return true;
     });
-  }, [transactions, minSolFilter, searchQuery]);
+  }, [transactions, streamFilter, minSolFilter, searchQuery]);
 
   // Summary Metrics
   const summary = useMemo(() => {
-    const totalWallets = wallets.length;
-    const totalSol = +wallets.reduce((acc, w) => acc + w.totalSolSpentToday, 0).toFixed(2);
-    const totalUsd = Math.round(totalSol * solUsdPrice);
-    const totalBuys = wallets.reduce((acc, w) => acc + w.totalBuysCountToday, 0);
-    const topWhale = [...wallets].sort((a, b) => b.totalSolSpentToday - a.totalSolSpentToday)[0] || null;
-
-    return {
-      totalWallets,
-      totalSol,
-      totalUsd,
-      totalBuys,
-      topWhale,
-    };
-  }, [wallets, solUsdPrice]);
+    return WhaleTrackingService.getSummaryStats(solUsdPrice);
+  }, [wallets, transactions, solUsdPrice]);
 
   return (
     <div className="space-y-6">
       {/* 1. Header Banner - Neon Blue & Black with Touch of White */}
-      <div className="relative overflow-hidden rounded-2xl bg-black border border-cyan-500/40 p-5 md:p-6 shadow-[0_0_30px_rgba(0,240,255,0.12)]">
+      <div className="relative overflow-hidden rounded-2xl bg-black border border-cyan-500/40 p-5 md:p-6 shadow-[0_0_35px_rgba(0,240,255,0.15)]">
         {/* Neon blue radial glow in background */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/4 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
@@ -139,17 +175,17 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-cyan-950/80 border border-cyan-400/50 text-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.35)]">
+              <div className="p-2.5 rounded-xl bg-cyan-950/80 border border-cyan-400/50 text-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.4)]">
                 <Radar className="w-6 h-6 animate-pulse" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl md:text-2xl font-black text-white tracking-tight uppercase flex items-center gap-2">
-                    1+ SOL Whale Radar <span className="text-xs px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 font-mono tracking-normal lowercase">live stream</span>
+                    1+ SOL Whale Radar <span className="text-xs px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 font-mono tracking-normal lowercase">buy &amp; sell tracking</span>
                   </h2>
                 </div>
                 <p className="text-xs text-zinc-300 font-mono">
-                  Autonomous wallet tracking engine capturing all addresses executing <span className="text-cyan-300 font-bold">1.0 SOL and above</span> buys across Pump.fun on Solana.
+                  Autonomous radar tracking when whales <span className="text-cyan-400 font-bold">bought the coin</span> (&ge; 1.0 SOL) and <span className="text-red-400 font-bold">when they sell the coin</span> across Solana pump.fun.
                 </p>
               </div>
             </div>
@@ -160,58 +196,76 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
             {onTriggerSimulateBuy && (
               <button
                 onClick={onTriggerSimulateBuy}
-                className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs flex items-center gap-1.5 transition-all shadow-[0_0_20px_rgba(0,240,255,0.4)] active:scale-95"
+                className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs flex items-center gap-1.5 transition shadow-[0_0_20px_rgba(0,240,255,0.4)]"
+                title="Simulate a real-time whale buy of 1+ SOL"
               >
                 <Zap className="w-3.5 h-3.5 fill-black" />
-                <span>Simulate 1+ SOL Buy</span>
+                <span>+ Simulate Whale Buy</span>
               </button>
             )}
 
-            <button
-              onClick={() => {
-                WhaleTrackingService.clearDailyData();
-                if (onRefresh) onRefresh();
-              }}
-              className="px-3 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-900 border border-white/20 text-white text-xs font-semibold flex items-center gap-1.5 transition"
-              title="Reset today's tracking data"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-zinc-300" />
-              <span>Reset Day</span>
-            </button>
+            {onTriggerSimulateSell && (
+              <button
+                onClick={onTriggerSimulateSell}
+                className="px-3.5 py-2 rounded-xl bg-[#090d1a] hover:bg-red-950/80 text-red-400 border border-red-500/50 font-bold text-xs flex items-center gap-1.5 transition shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                title="Simulate a whale taking profit or selling their holding"
+              >
+                <ArrowDownRight className="w-3.5 h-3.5" />
+                <span>Simulate Whale Sell</span>
+              </button>
+            )}
+
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                className="p-2 rounded-xl bg-black border border-white/20 text-zinc-300 hover:text-white hover:border-cyan-400 transition"
+                title="Refresh tracking data"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* 2. Key Metrics Bar */}
-        <div className="mt-6 pt-5 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-[#050813] border border-cyan-500/30 rounded-xl p-3">
-            <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Whales Tracked Today</div>
+        {/* 2. Key Metrics Overview Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-5 pt-4 border-t border-cyan-500/20">
+          <div className="bg-[#040814] border border-cyan-500/30 rounded-xl p-3">
+            <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Whales Active Today</div>
             <div className="text-2xl font-black text-white mt-1 flex items-baseline gap-1">
-              <span>{summary.totalWallets}</span>
-              <span className="text-xs text-cyan-400 font-mono">wallets</span>
+              <span>{summary.totalWalletsCount}</span>
+              <span className="text-xs text-cyan-400 font-mono">addresses</span>
             </div>
-            <div className="text-[10px] text-zinc-400 font-mono mt-0.5">$\ge$ 1.0 SOL buys only</div>
+            <div className="text-[10px] text-zinc-400 font-mono mt-0.5">Tracked with &ge;1.0 SOL buys</div>
           </div>
 
-          <div className="bg-[#050813] border border-cyan-500/30 rounded-xl p-3">
-            <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Total SOL Deployed</div>
-            <div className="text-2xl font-black text-cyan-400 mt-1 flex items-baseline gap-1.5">
-              <span>{summary.totalSol}</span>
-              <span className="text-xs text-white font-mono">SOL</span>
+          <div className="bg-[#040814] border border-cyan-500/30 rounded-xl p-3">
+            <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Total SOL Bought</div>
+            <div className="text-2xl font-black text-cyan-400 font-mono mt-1">
+              {summary.totalSolDeployedToday} SOL
             </div>
-            <div className="text-[10px] text-zinc-400 font-mono mt-0.5">≈ ${summary.totalUsd.toLocaleString()} USD</div>
+            <div className="text-[10px] text-zinc-400 font-mono mt-0.5">≈ ${summary.totalUsdDeployedToday.toLocaleString()} USD ({summary.totalBuysCountToday} buys)</div>
           </div>
 
-          <div className="bg-[#050813] border border-cyan-500/30 rounded-xl p-3">
-            <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">1+ SOL Buys Executed</div>
-            <div className="text-2xl font-black text-white mt-1 flex items-baseline gap-1">
-              <span>{summary.totalBuys}</span>
-              <span className="text-xs text-cyan-400 font-mono">transactions</span>
+          <div className="bg-[#040814] border border-cyan-500/30 rounded-xl p-3">
+            <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Total SOL Sold</div>
+            <div className="text-2xl font-black text-red-400 font-mono mt-1">
+              {summary.totalSolSoldToday} SOL
             </div>
-            <div className="text-[10px] text-zinc-400 font-mono mt-0.5">Recorded in real-time</div>
+            <div className="text-[10px] text-zinc-400 font-mono mt-0.5">{summary.totalSellsCountToday} sell transactions</div>
           </div>
 
-          <div className="bg-[#050813] border border-cyan-500/30 rounded-xl p-3">
-            <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Top Whale of the Day</div>
+          <div className="bg-[#040814] border border-cyan-500/30 rounded-xl p-3">
+            <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Realized Whale PnL</div>
+            <div className={`text-2xl font-black font-mono mt-1 flex items-center gap-1 ${
+              summary.netRealizedPnlSol >= 0 ? 'text-cyan-300' : 'text-red-400'
+            }`}>
+              <span>{summary.netRealizedPnlSol >= 0 ? `+${summary.netRealizedPnlSol}` : summary.netRealizedPnlSol} SOL</span>
+            </div>
+            <div className="text-[10px] text-zinc-400 font-mono mt-0.5">From sold positions today</div>
+          </div>
+
+          <div className="col-span-2 md:col-span-1 bg-[#040814] border border-cyan-500/30 rounded-xl p-3">
+            <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Top Whale of Day</div>
             <div className="text-sm font-black text-white mt-1 truncate">
               {summary.topWhale ? (summary.topWhale.label || `${summary.topWhale.walletAddress.slice(0, 6)}...${summary.topWhale.walletAddress.slice(-4)}`) : 'None'}
             </div>
@@ -222,7 +276,7 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
         </div>
       </div>
 
-      {/* 3. Controls & SubTabs: Wallets & Holdings vs Live Buys Stream */}
+      {/* 3. Controls & SubTabs: Wallets & Holdings vs Live Buys/Sells Stream */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-black border border-white/10 p-4 rounded-xl">
         {/* Navigation Subtabs */}
         <div className="flex items-center gap-1 bg-[#060a17] border border-cyan-500/30 p-1 rounded-xl">
@@ -235,7 +289,7 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
             }`}
           >
             <Coins className="w-3.5 h-3.5" />
-            <span>Tracked Wallets &amp; Daily Holdings ({filteredWallets.length})</span>
+            <span>Tracked Wallets &amp; Coin Trades ({filteredWallets.length})</span>
           </button>
 
           <button
@@ -246,8 +300,8 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
                 : 'text-zinc-400 hover:text-white hover:bg-white/5'
             }`}
           >
-            <Zap className="w-3.5 h-3.5" />
-            <span>Live 1+ SOL Buys Stream ({filteredTransactions.length})</span>
+            <History className="w-3.5 h-3.5" />
+            <span>Live Buy &amp; Sell Stream ({filteredTransactions.length})</span>
           </button>
         </div>
 
@@ -303,20 +357,21 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
               onChange={(e) => setSortBy(e.target.value as any)}
               className="bg-[#050813] border border-white/10 text-xs text-zinc-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-400 font-mono"
             >
-              <option value="sol">Sort: Highest SOL</option>
+              <option value="sol">Sort: Highest SOL Bought</option>
               <option value="coins">Sort: Most Coins Bought</option>
-              <option value="recent">Sort: Most Recent</option>
+              <option value="pnl">Sort: Highest Realized PnL</option>
+              <option value="recent">Sort: Most Recent Active</option>
             </select>
           )}
         </div>
       </div>
 
-      {/* 4. SUB-TAB 1: TRACKED WALLETS & DAILY HOLDINGS (Requirement 1 & 2) */}
+      {/* 4. SUB-TAB 1: TRACKED WALLETS & DETAILED COIN BUY/SELL TIMINGS */}
       {activeSubTab === 'wallets' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs text-zinc-400 font-mono px-1">
             <span>Showing {filteredWallets.length} whale wallet(s) active today</span>
-            <span>Click any wallet to inspect all coins bought &amp; holdings</span>
+            <span>Click any wallet to inspect when they bought &amp; when they sold each coin</span>
           </div>
 
           {filteredWallets.length === 0 ? (
@@ -326,7 +381,7 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
               </div>
               <h3 className="text-white font-bold text-sm">No Wallets Matched Current Filter</h3>
               <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                Try lowering the minimum SOL filter (e.g. 1.0 SOL) or clearing your search term to see all tracked addresses.
+                Try lowering the minimum SOL filter or clearing your search term to view all tracked whale addresses.
               </p>
               {onTriggerSimulateBuy && (
                 <button
@@ -345,6 +400,10 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
                 const isCopied = copiedKey === wallet.walletAddress;
                 const timeAgoMin = Math.round((Date.now() - wallet.lastActiveToday) / (60 * 1000));
                 const timeAgoStr = timeAgoMin <= 0 ? 'just now' : `${timeAgoMin}m ago`;
+
+                const soldHoldingsCount = wallet.holdingsToday.filter((h) => h.holdingStatus === 'sold').length;
+                const partialSoldHoldingsCount = wallet.holdingsToday.filter((h) => h.holdingStatus === 'partially_sold').length;
+                const activeHoldingCount = wallet.holdingsToday.filter((h) => h.holdingStatus === 'holding').length;
 
                 return (
                   <div
@@ -382,6 +441,15 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
                             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/30">
                               {wallet.tier}
                             </span>
+                            {wallet.netRealizedPnlSol !== 0 && (
+                              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                                wallet.netRealizedPnlSol > 0
+                                  ? 'bg-cyan-950/60 text-cyan-300 border-cyan-400/40'
+                                  : 'bg-red-950/60 text-red-300 border-red-500/40'
+                              }`}>
+                                Realized: {wallet.netRealizedPnlSol > 0 ? `+${wallet.netRealizedPnlSol}` : wallet.netRealizedPnlSol} SOL
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono mt-0.5">
@@ -420,9 +488,9 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
                         </div>
                       </div>
 
-                      {/* Right: Requirement 2 Core Stats - Coins bought today & Total SOL */}
+                      {/* Right: Core Trade Metrics (Coins Bought, Holdings, Sells) */}
                       <div className="flex items-center justify-between md:justify-end gap-6 pt-3 md:pt-0 border-t md:border-t-0 border-white/10">
-                        {/* NUMBER OF COINS BOUGHT IN THAT DAY / HOLDING */}
+                        {/* NUMBER OF COINS BOUGHT IN THAT DAY & HOLDING STATUS */}
                         <div className="text-left md:text-right">
                           <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Coins Bought Today</div>
                           <div className="text-base md:text-lg font-black text-white flex items-center md:justify-end gap-1.5">
@@ -430,19 +498,23 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
                             <span>Coins</span>
                             <span className="text-xs text-zinc-400 font-normal">({wallet.totalBuysCountToday} buys)</span>
                           </div>
-                          <div className="text-[10px] text-zinc-400 font-mono">
-                            {wallet.holdingsToday.filter((h) => h.holdingStatus === 'holding').length} currently holding
+                          <div className="text-[10px] font-mono flex items-center md:justify-end gap-1.5 mt-0.5">
+                            <span className="text-cyan-300">{activeHoldingCount} holding</span>
+                            <span className="text-zinc-500">·</span>
+                            <span className="text-amber-300">{partialSoldHoldingsCount} partial</span>
+                            <span className="text-zinc-500">·</span>
+                            <span className="text-red-400">{soldHoldingsCount} sold</span>
                           </div>
                         </div>
 
-                        {/* TOTAL SOL DEPLOYED TODAY */}
+                        {/* TOTAL SOL DEPLOYED & SOLD */}
                         <div className="text-right">
-                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Total Deployed Today</div>
+                          <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Bought &amp; Sold Volume</div>
                           <div className="text-base md:text-lg font-black text-cyan-400 font-mono">
                             {wallet.totalSolSpentToday} SOL
                           </div>
                           <div className="text-[10px] text-zinc-300 font-mono">
-                            ≈ ${(wallet.totalSolSpentToday * solUsdPrice).toLocaleString()} USD
+                            Sold: <span className="text-red-400 font-bold">{wallet.totalSolSoldToday || 0} SOL</span>
                           </div>
                         </div>
 
@@ -453,133 +525,272 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
                       </div>
                     </div>
 
-                    {/* EXPANDED VIEW: Coins Bought In That Day & Holding Breakdown (Requirement 2) */}
+                    {/* EXPANDED VIEW: Coins Bought and Sold with Timestamps (Requirement 1: Show when they bought and when they sell) */}
                     {isExpanded && (
                       <div className="border-t border-cyan-500/30 p-4 md:p-5 bg-[#030611] rounded-b-2xl space-y-4">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <h4 className="text-xs font-mono font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                             <Coins className="w-3.5 h-3.5 text-cyan-400" />
-                            <span>Breakdown of Coins Bought &amp; Holdings Today ({wallet.holdingsToday.length} Coins)</span>
+                            <span>Coin Purchases &amp; Sell Executions ({wallet.holdingsToday.length} Coins)</span>
                           </h4>
-                          <span className="text-[11px] font-mono text-cyan-300">
-                            Aggregated across all &ge; 1.0 SOL transactions
+                          <span className="text-[11px] font-mono text-cyan-300 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>Showing exact buy and sell timestamps for each coin</span>
                           </span>
                         </div>
 
-                        {/* Holdings Cards Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {/* Holdings & Sell Executions Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                           {wallet.holdingsToday.map((holding) => {
                             const isHoldingCopied = copiedKey === holding.mint;
                             const isProfit = holding.unrealizedPnlPercent >= 0;
+                            const buyTimeInfo = formatTimeDetails(holding.firstBuyTimeToday);
+                            const sellTimeInfo = holding.lastSellTimeToday ? formatTimeDetails(holding.lastSellTimeToday) : null;
+                            const isTimelineOpen = expandedTimelineMint === holding.mint;
+
+                            // Hold Duration
+                            let durationLabel = '';
+                            if (holding.lastSellTimeToday) {
+                              durationLabel = formatDuration(holding.firstBuyTimeToday, holding.lastSellTimeToday);
+                            } else {
+                              durationLabel = formatDuration(holding.firstBuyTimeToday, Date.now());
+                            }
 
                             return (
                               <div
                                 key={holding.mint}
-                                className="bg-black border border-white/10 hover:border-cyan-400/50 rounded-xl p-3.5 space-y-2.5 transition"
+                                className={`bg-black border rounded-xl p-3.5 space-y-3 transition flex flex-col justify-between ${
+                                  holding.holdingStatus === 'sold'
+                                    ? 'border-red-500/30 hover:border-red-400/60'
+                                    : holding.holdingStatus === 'partially_sold'
+                                    ? 'border-amber-400/30 hover:border-amber-400/60'
+                                    : 'border-cyan-500/30 hover:border-cyan-400/70'
+                                }`}
                               >
-                                {/* Coin Symbol & Name */}
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="font-bold text-white text-sm">${holding.tokenSymbol}</span>
-                                      <span className="text-xs text-zinc-400 truncate max-w-[120px]">{holding.tokenName}</span>
+                                <div>
+                                  {/* Header: Coin Symbol & Status Tag */}
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-bold text-white text-sm">${holding.tokenSymbol}</span>
+                                        <span className="text-xs text-zinc-400 truncate max-w-[110px]">{holding.tokenName}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-400 mt-0.5">
+                                        <span>CA: {holding.mint.slice(0, 6)}...{holding.mint.slice(-4)}</span>
+                                        <button
+                                          onClick={() => copyToClipboard(holding.mint, holding.mint)}
+                                          className="hover:text-white p-0.5"
+                                          title="Copy token contract address"
+                                        >
+                                          {isHoldingCopied ? <Check className="w-2.5 h-2.5 text-cyan-400" /> : <Copy className="w-2.5 h-2.5" />}
+                                        </button>
+                                        <a
+                                          href={`https://pump.fun/${holding.mint}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="hover:text-cyan-400 p-0.5"
+                                          title="View on Pump.fun"
+                                        >
+                                          <ExternalLink className="w-2.5 h-2.5" />
+                                        </a>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-400 mt-0.5">
-                                      <span>CA: {holding.mint.slice(0, 6)}...{holding.mint.slice(-4)}</span>
-                                      <button
-                                        onClick={() => copyToClipboard(holding.mint, holding.mint)}
-                                        className="hover:text-white p-0.5"
-                                        title="Copy token contract address"
-                                      >
-                                        {isHoldingCopied ? <Check className="w-2.5 h-2.5 text-cyan-400" /> : <Copy className="w-2.5 h-2.5" />}
-                                      </button>
-                                      <a
-                                        href={`https://pump.fun/${holding.mint}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="hover:text-cyan-400 p-0.5"
-                                        title="View on Pump.fun"
-                                      >
-                                        <ExternalLink className="w-2.5 h-2.5" />
-                                      </a>
+
+                                    {/* Status Badge */}
+                                    <div className="text-right">
+                                      {holding.holdingStatus === 'sold' ? (
+                                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-red-950 border border-red-500/50 text-red-300 uppercase">
+                                          100% Sold
+                                        </span>
+                                      ) : holding.holdingStatus === 'partially_sold' ? (
+                                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-950 border border-amber-500/50 text-amber-300 uppercase">
+                                          Partial Sold
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-cyan-950 border border-cyan-400/50 text-cyan-300 uppercase">
+                                          Holding
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
 
-                                  {/* Status tag */}
-                                  <div className="text-right">
-                                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 border border-cyan-400/40 text-cyan-300 uppercase">
-                                      {holding.holdingStatus}
-                                    </span>
+                                  {/* CORE FEATURE: WHEN THEY BOUGHT AND WHEN THEY SELL THE COIN */}
+                                  <div className="mt-3 p-2.5 rounded-lg bg-[#060b17] border border-cyan-500/20 space-y-2 text-xs font-mono">
+                                    {/* WHEN BOUGHT */}
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex items-center gap-1.5 text-cyan-400 font-bold">
+                                        <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                                        <span>Bought:</span>
+                                      </div>
+                                      <div className="text-right">
+                                        <div className="text-white font-bold">{buyTimeInfo.timeStr}</div>
+                                        <div className="text-[10px] text-zinc-400">{buyTimeInfo.dateStr} ({buyTimeInfo.relativeStr})</div>
+                                      </div>
+                                    </div>
+
+                                    {/* WHEN SOLD (OR STILL HOLDING) */}
+                                    <div className="flex items-start justify-between gap-2 pt-1.5 border-t border-white/5">
+                                      <div className="flex items-center gap-1.5">
+                                        {sellTimeInfo ? (
+                                          <span className="flex items-center gap-1.5 text-red-400 font-bold">
+                                            <span className="w-2 h-2 rounded-full bg-red-400" />
+                                            <span>Sold:</span>
+                                          </span>
+                                        ) : (
+                                          <span className="flex items-center gap-1.5 text-zinc-400 font-medium">
+                                            <span className="w-2 h-2 rounded-full bg-cyan-500/40" />
+                                            <span>Sold:</span>
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="text-right">
+                                        {sellTimeInfo ? (
+                                          <>
+                                            <div className="text-red-300 font-bold">{sellTimeInfo.timeStr}</div>
+                                            <div className="text-[10px] text-zinc-400">{sellTimeInfo.dateStr} ({sellTimeInfo.relativeStr})</div>
+                                          </>
+                                        ) : (
+                                          <span className="text-[11px] text-cyan-300 font-mono italic">
+                                            No sells yet (Still holding)
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* HOLD DURATION SUMMARY */}
+                                    <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-white/5">
+                                      <span>Hold Duration:</span>
+                                      <span className="text-white font-bold">
+                                        {holding.holdingStatus === 'sold' ? `Held for ${durationLabel}` : `Holding for ${durationLabel}`}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Financial Metrics */}
+                                  <div className="grid grid-cols-2 gap-2 pt-2.5 text-xs font-mono">
+                                    <div>
+                                      <div className="text-[10px] text-zinc-400">Total Bought</div>
+                                      <div className="text-cyan-400 font-bold">{holding.totalSolBoughtToday} SOL</div>
+                                      <div className="text-[10px] text-zinc-400">({holding.buyCountToday} buys)</div>
+                                    </div>
+
+                                    <div className="text-right">
+                                      <div className="text-[10px] text-zinc-400">Total Sold</div>
+                                      <div className="text-red-400 font-bold">{holding.totalSolSoldToday || 0} SOL</div>
+                                      <div className="text-[10px] text-zinc-400">({holding.sellCountToday || 0} sells)</div>
+                                    </div>
+
+                                    <div>
+                                      <div className="text-[10px] text-zinc-400">Tokens Left</div>
+                                      <div className="text-white font-bold">{holding.remainingTokens.toLocaleString()}</div>
+                                    </div>
+
+                                    <div className="text-right">
+                                      <div className="text-[10px] text-zinc-400">Multiplier / PnL</div>
+                                      <div className={`font-bold flex items-center justify-end gap-1 ${isProfit ? 'text-cyan-300' : 'text-red-400'}`}>
+                                        {isProfit ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                        <span>{holding.currentMultiplier.toFixed(2)}x ({isProfit ? `+${holding.unrealizedPnlPercent}%` : `${holding.unrealizedPnlPercent}%`})</span>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
 
-                                {/* Financial Details */}
-                                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10 text-xs font-mono">
-                                  <div>
-                                    <div className="text-[10px] text-zinc-400">Total SOL Bought</div>
-                                    <div className="text-cyan-400 font-bold">{holding.totalSolBoughtToday} SOL</div>
-                                    <div className="text-[10px] text-zinc-400">({holding.buyCountToday} buy txns)</div>
+                                {/* Actions & Interactive Timeline Drawer Button */}
+                                <div className="space-y-2 pt-2 border-t border-white/10">
+                                  <div className="flex items-center justify-between gap-2">
+                                    {/* Toggle Trade Timeline */}
+                                    <button
+                                      onClick={() => setExpandedTimelineMint(isTimelineOpen ? null : holding.mint)}
+                                      className="text-[11px] font-mono text-cyan-400 hover:text-white flex items-center gap-1 transition"
+                                    >
+                                      <History className="w-3 h-3" />
+                                      <span>{isTimelineOpen ? 'Hide History' : `Trade Flow (${holding.tradeTimeline?.length || 1})`}</span>
+                                      {isTimelineOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                    </button>
+
+                                    {/* Simulate Sell on this holding */}
+                                    {holding.remainingTokens > 0 && (
+                                      <button
+                                        onClick={(e) => handleManualSellHolding(wallet.walletAddress, holding.mint, e)}
+                                        className="px-2 py-0.5 rounded bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-300 text-[10px] font-mono font-bold flex items-center gap-1 transition shadow-[0_0_8px_rgba(239,68,68,0.2)]"
+                                        title="Simulate this whale selling this coin right now"
+                                      >
+                                        <ArrowDownRight className="w-3 h-3" />
+                                        <span>Sell Coin</span>
+                                      </button>
+                                    )}
                                   </div>
 
-                                  <div className="text-right">
-                                    <div className="text-[10px] text-zinc-400">Tokens Received</div>
-                                    <div className="text-white font-bold">{holding.totalTokensBoughtToday.toLocaleString()}</div>
-                                    <div className="text-[10px] text-zinc-400">on bonding curve</div>
-                                  </div>
+                                  {/* Detailed Chronological Timeline Drawer */}
+                                  {isTimelineOpen && (
+                                    <div className="mt-2 p-2.5 rounded-lg bg-[#02050e] border border-cyan-500/30 space-y-2">
+                                      <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
+                                        Audit Trail: When Whale Bought &amp; Sold ${holding.tokenSymbol}
+                                      </div>
+                                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                        {holding.tradeTimeline?.map((item, idx) => {
+                                          const itemTime = formatTimeDetails(item.timestamp);
+                                          const isBuy = item.type === 'buy';
 
-                                  <div>
-                                    <div className="text-[10px] text-zinc-400">Avg Buy Price</div>
-                                    <div className="text-zinc-200">{holding.averageBuyPriceSol.toFixed(9)} SOL</div>
-                                  </div>
+                                          return (
+                                            <div
+                                              key={item.id || idx}
+                                              className={`p-2 rounded border text-[11px] font-mono ${
+                                                isBuy
+                                                  ? 'bg-cyan-950/30 border-cyan-500/30 text-white'
+                                                  : 'bg-red-950/30 border-red-500/30 text-white'
+                                              }`}
+                                            >
+                                              <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5 font-bold">
+                                                  {isBuy ? (
+                                                    <span className="text-cyan-400 flex items-center gap-1">
+                                                      <ArrowUpRight className="w-3 h-3" /> BOUGHT
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-red-400 flex items-center gap-1">
+                                                      <ArrowDownRight className="w-3 h-3" /> SOLD
+                                                    </span>
+                                                  )}
+                                                  <span>{item.solAmount} SOL</span>
+                                                </div>
+                                                <div className="text-zinc-400 text-[10px]">
+                                                  {itemTime.timeStr}
+                                                </div>
+                                              </div>
 
-                                  <div className="text-right">
-                                    <div className="text-[10px] text-zinc-400">Current Multiplier</div>
-                                    <div className={`font-bold flex items-center justify-end gap-1 ${isProfit ? 'text-cyan-300' : 'text-red-400'}`}>
-                                      <TrendingUp className="w-3 h-3" />
-                                      <span>{holding.currentMultiplier.toFixed(2)}x ({isProfit ? `+${holding.unrealizedPnlPercent}%` : `${holding.unrealizedPnlPercent}%`})</span>
+                                              <div className="flex items-center justify-between text-[10px] text-zinc-400 mt-1">
+                                                <span>{item.tokenAmount.toLocaleString()} tokens</span>
+                                                <a
+                                                  href={`https://solscan.io/tx/${item.signature}`}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="text-cyan-400 hover:underline flex items-center gap-0.5"
+                                                >
+                                                  <span>tx: {item.signature.slice(0, 6)}...</span>
+                                                  <ExternalLink className="w-2.5 h-2.5" />
+                                                </a>
+                                              </div>
+
+                                              {!isBuy && item.profitSol !== undefined && (
+                                                <div className="text-[10px] mt-1 pt-1 border-t border-red-500/20 text-right">
+                                                  <span className={item.profitSol >= 0 ? 'text-cyan-300 font-bold' : 'text-red-400 font-bold'}>
+                                                    PnL: {item.profitSol >= 0 ? `+${item.profitSol}` : item.profitSol} SOL ({item.pnlPercent || 0}%)
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
                                     </div>
-                                  </div>
+                                  )}
                                 </div>
                               </div>
                             );
                           })}
                         </div>
-
-                        {/* Recent Transactions by this whale */}
-                        {wallet.transactionsToday.length > 0 && (
-                          <div className="pt-2">
-                            <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider mb-2">
-                              Recent 1+ SOL Buy Transactions for this Wallet:
-                            </div>
-                            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                              {wallet.transactionsToday.map((tx) => (
-                                <div
-                                  key={tx.id}
-                                  className="flex items-center justify-between text-xs font-mono p-2 rounded-lg bg-black border border-white/5 hover:border-cyan-500/30"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-cyan-400 font-bold">{tx.solAmount} SOL</span>
-                                    <span className="text-zinc-400">&rarr;</span>
-                                    <span className="text-white font-bold">${tx.tokenSymbol}</span>
-                                    <span className="text-zinc-400">({tx.tokenAmount.toLocaleString()} tokens)</span>
-                                  </div>
-                                  <div className="flex items-center gap-2 text-zinc-400">
-                                    <span>{new Date(tx.timestamp).toLocaleTimeString()}</span>
-                                    <a
-                                      href={`https://solscan.io/tx/${tx.signature}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-cyan-400 hover:text-cyan-300 p-0.5"
-                                      title="View Solana Transaction"
-                                    >
-                                      <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
@@ -590,14 +801,43 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
         </div>
       )}
 
-      {/* 5. SUB-TAB 2: LIVE 1+ SOL BUYS STREAM (Requirement 1) */}
+      {/* 5. SUB-TAB 2: LIVE 1+ SOL BUYS & SELLS STREAM */}
       {activeSubTab === 'stream' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between text-xs text-zinc-400 font-mono px-1">
-            <span>Showing {filteredTransactions.length} transaction(s) with &ge; {minSolFilter} SOL</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-zinc-400 font-mono px-1">
+            <div className="flex items-center gap-2">
+              <span>Filter Stream:</span>
+              <div className="flex items-center gap-1 bg-[#050813] border border-white/10 p-0.5 rounded-lg">
+                <button
+                  onClick={() => setStreamFilter('all')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
+                    streamFilter === 'all' ? 'bg-cyan-500 text-black' : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  All Activity ({transactions.length})
+                </button>
+                <button
+                  onClick={() => setStreamFilter('buys')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
+                    streamFilter === 'buys' ? 'bg-cyan-500 text-black' : 'text-cyan-300 hover:text-white'
+                  }`}
+                >
+                  🟢 1+ SOL Buys ({transactions.filter((t) => t.type === 'buy').length})
+                </button>
+                <button
+                  onClick={() => setStreamFilter('sells')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition ${
+                    streamFilter === 'sells' ? 'bg-red-500 text-black' : 'text-red-400 hover:text-white'
+                  }`}
+                >
+                  🔴 Whale Sells ({transactions.filter((t) => t.type === 'sell').length})
+                </button>
+              </div>
+            </div>
+
             <span className="text-cyan-400 flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-              Live On-Chain Radar
+              Live On-Chain Radar: Buys &amp; Sells
             </span>
           </div>
 
@@ -606,63 +846,90 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
               <div className="w-12 h-12 rounded-full bg-cyan-950/60 border border-cyan-400/30 text-cyan-400 flex items-center justify-center mx-auto">
                 <Radar className="w-6 h-6 animate-pulse" />
               </div>
-              <h3 className="text-white font-bold text-sm">No 1+ SOL Buys in Current Filter</h3>
+              <h3 className="text-white font-bold text-sm">No Transactions in Current Filter</h3>
               <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                No transactions matched your search or minimum SOL limit. Lower the filter or click below to simulate live whale buys.
+                No buy or sell transactions matched your filter. Click below to simulate live whale executions.
               </p>
-              {onTriggerSimulateBuy && (
-                <button
-                  onClick={onTriggerSimulateBuy}
-                  className="mt-2 px-4 py-2 rounded-xl bg-cyan-500 text-black font-bold text-xs inline-flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,240,255,0.3)]"
-                >
-                  <Zap className="w-3.5 h-3.5 fill-black" />
-                  <span>Simulate 1+ SOL Whale Buy</span>
-                </button>
-              )}
+              <div className="flex items-center justify-center gap-2 pt-2">
+                {onTriggerSimulateBuy && (
+                  <button
+                    onClick={onTriggerSimulateBuy}
+                    className="px-4 py-2 rounded-xl bg-cyan-500 text-black font-bold text-xs inline-flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,240,255,0.3)]"
+                  >
+                    <Zap className="w-3.5 h-3.5 fill-black" />
+                    <span>Simulate 1+ SOL Buy</span>
+                  </button>
+                )}
+                {onTriggerSimulateSell && (
+                  <button
+                    onClick={onTriggerSimulateSell}
+                    className="px-4 py-2 rounded-xl bg-red-950/80 border border-red-500/50 text-red-300 font-bold text-xs inline-flex items-center gap-1.5"
+                  >
+                    <ArrowDownRight className="w-3.5 h-3.5" />
+                    <span>Simulate Whale Sell</span>
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-2">
               {filteredTransactions.map((tx) => {
                 const isCopied = copiedKey === tx.id;
+                const isBuy = tx.type === 'buy';
                 const isMega = tx.solAmount >= 10.0;
-                const isHigh = tx.solAmount >= 5.0;
+                const timeInfo = formatTimeDetails(tx.timestamp);
 
                 return (
                   <div
                     key={tx.id}
                     className={`rounded-xl bg-black border p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
-                      isMega
-                        ? 'border-cyan-400 shadow-[0_0_20px_rgba(0,240,255,0.25)]'
-                        : isHigh
-                        ? 'border-cyan-500/50'
-                        : 'border-white/10 hover:border-cyan-400/40'
+                      isBuy
+                        ? isMega
+                          ? 'border-cyan-400 shadow-[0_0_20px_rgba(0,240,255,0.25)]'
+                          : 'border-cyan-500/30 hover:border-cyan-400/60'
+                        : 'border-red-500/40 hover:border-red-400/70 shadow-[0_0_15px_rgba(239,68,68,0.15)]'
                     }`}
                   >
-                    {/* Left: Buy Amount & Coin Details */}
+                    {/* Left: Trade Direction, SOL Amount, Coin info */}
                     <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg font-mono font-bold text-xs flex flex-col items-center justify-center ${
-                        isMega
-                          ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(0,240,255,0.5)]'
-                          : isHigh
-                          ? 'bg-cyan-950 text-cyan-300 border border-cyan-400/50'
-                          : 'bg-[#060b17] text-white border border-white/20'
+                      <div className={`p-2 rounded-lg font-mono font-bold text-xs flex flex-col items-center justify-center min-w-[65px] ${
+                        isBuy
+                          ? isMega
+                            ? 'bg-cyan-500 text-black shadow-[0_0_10px_rgba(0,240,255,0.5)]'
+                            : 'bg-cyan-950 text-cyan-300 border border-cyan-400/50'
+                          : 'bg-red-950 text-red-300 border border-red-500/50'
                       }`}>
+                        <div className="flex items-center gap-0.5 text-[9px] uppercase font-black">
+                          {isBuy ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                          <span>{isBuy ? 'BOUGHT' : 'SOLD'}</span>
+                        </div>
                         <span className="text-sm font-black">{tx.solAmount}</span>
-                        <span className="text-[9px] uppercase">SOL</span>
+                        <span className="text-[8px]">SOL</span>
                       </div>
 
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-white text-sm">${tx.tokenSymbol}</span>
                           <span className="text-xs text-zinc-400">{tx.tokenName}</span>
-                          {isMega && (
+
+                          {isBuy && isMega && (
                             <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-400 text-black font-black uppercase">
                               MEGA WHALE BUY
                             </span>
                           )}
+
+                          {!isBuy && tx.realizedProfitSol !== undefined && (
+                            <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border font-bold ${
+                              tx.realizedProfitSol >= 0
+                                ? 'bg-cyan-950 text-cyan-300 border-cyan-400/40'
+                                : 'bg-red-950 text-red-400 border-red-500/40'
+                            }`}>
+                              {tx.realizedProfitSol >= 0 ? `+${tx.realizedProfitSol} SOL (+${tx.realizedPnlPercent}%)` : `${tx.realizedProfitSol} SOL (${tx.realizedPnlPercent}%)`}
+                            </span>
+                          )}
                         </div>
 
-                        <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 mt-0.5">
+                        <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 mt-1">
                           <span>Wallet:</span>
                           <span className="text-cyan-300 font-bold">
                             {tx.walletLabel || `${tx.walletAddress.slice(0, 6)}...${tx.walletAddress.slice(-4)}`}
@@ -685,11 +952,21 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
                           >
                             <ExternalLink className="w-3 h-3" />
                           </a>
+
+                          {/* Reference to original buy time if this is a sell */}
+                          {!isBuy && tx.initialBuyTimestamp && (
+                            <>
+                              <span className="text-zinc-600">·</span>
+                              <span className="text-[10px] text-zinc-400">
+                                (Initial Buy: {new Date(tx.initialBuyTimestamp).toLocaleTimeString()})
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Right: Tokens Received & Timestamp */}
+                    {/* Right: Tokens Transacted, Execution Timestamp, Solscan */}
                     <div className="flex items-center justify-between sm:justify-end gap-5 text-right font-mono text-xs">
                       <div>
                         <div className="text-white font-bold">{tx.tokenAmount.toLocaleString()} tokens</div>
@@ -697,12 +974,18 @@ export const WhaleTrackingDashboard: React.FC<WhaleTrackingDashboardProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <span className="text-zinc-400">{new Date(tx.timestamp).toLocaleTimeString()}</span>
+                        <div className="text-right">
+                          <div className={isBuy ? 'text-cyan-300 font-bold' : 'text-red-300 font-bold'}>
+                            {timeInfo.timeStr}
+                          </div>
+                          <div className="text-[10px] text-zinc-500">{timeInfo.relativeStr}</div>
+                        </div>
+
                         <a
                           href={`https://solscan.io/tx/${tx.signature}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-cyan-400 hover:text-cyan-300 p-1 rounded bg-[#060b17] border border-cyan-500/30"
+                          className="text-cyan-400 hover:text-cyan-300 p-1.5 rounded bg-[#060b17] border border-cyan-500/30"
                           title="View on Solscan Explorer"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />

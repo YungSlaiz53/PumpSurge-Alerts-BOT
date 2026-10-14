@@ -163,45 +163,90 @@ export interface BotTelemetry {
 }
 
 /**
- * 1+ SOL Whale Buy Transaction event
+ * Execution event type for Whale Radar
  */
-export interface WhaleBuyTransaction {
+export type WhaleTradeType = 'buy' | 'sell';
+
+/**
+ * Whale Transaction event (Buy or Sell)
+ */
+export interface WhaleTransaction {
   id: string;
+  type: WhaleTradeType;
   signature: string;
   slot?: number;
-  timestamp: number;
+  timestamp: number; // Exact execution time when bought or sold
   walletAddress: string;
   walletLabel?: string;
   mint: string;
   tokenSymbol: string;
   tokenName: string;
-  solAmount: number; // >= 1.0 SOL
+  solAmount: number; // For buy: SOL spent (>= 1.0 SOL). For sell: SOL received.
   solUsdValue: number;
-  tokenAmount: number;
+  tokenAmount: number; // Tokens bought or sold
   priceSol: number;
   priceUsd: number;
   currentMultiplier?: number;
+  realizedProfitSol?: number; // Profit or loss in SOL if this was a sell
+  realizedPnlPercent?: number; // Percentage gain/loss on this sale
+  initialBuyTimestamp?: number; // Reference to when the whale originally bought
+  holdDurationMs?: number; // Time elapsed between initial buy and this sell
   holdingStatus: 'holding' | 'partially_sold' | 'sold';
 }
 
 /**
- * Breakdown of a specific coin bought/held today by a tracked wallet
+ * Backward compatibility alias
+ */
+export type WhaleBuyTransaction = WhaleTransaction;
+
+/**
+ * Chronological buy/sell order event in a token holding lifecycle
+ */
+export interface WhaleTradeEvent {
+  id: string;
+  type: WhaleTradeType;
+  timestamp: number;
+  solAmount: number;
+  tokenAmount: number;
+  priceSol: number;
+  signature: string;
+  profitSol?: number;
+  pnlPercent?: number;
+}
+
+/**
+ * Breakdown of a specific coin bought and/or sold today by a tracked wallet
  */
 export interface TrackedWalletHolding {
   mint: string;
   tokenSymbol: string;
   tokenName: string;
+  // BUY Execution Times & Data
+  firstBuyTimeToday: number; // Exact timestamp of initial buy
+  lastBuyTimeToday: number; // Exact timestamp of latest buy
+  buyCountToday: number;
   totalSolBoughtToday: number;
   totalTokensBoughtToday: number;
-  firstBuyTimeToday: number;
-  lastBuyTimeToday: number;
-  buyCountToday: number;
   averageBuyPriceSol: number;
+
+  // SELL Execution Times & Data (When they sold)
+  firstSellTimeToday?: number; // Exact timestamp of initial sell (if any)
+  lastSellTimeToday?: number; // Exact timestamp of latest sell (if any)
+  sellCountToday: number;
+  totalSolSoldToday: number;
+  totalTokensSoldToday: number;
+  remainingTokens: number;
+  realizedPnlSol: number; // Realized profit/loss in SOL
+
+  // Current market valuation & Status
   currentPriceSol: number;
   currentMultiplier: number;
   unrealizedPnlSol: number;
   unrealizedPnlPercent: number;
   holdingStatus: 'holding' | 'partially_sold' | 'sold';
+
+  // Complete Chronological Audit Trail of Buys and Sells
+  tradeTimeline: WhaleTradeEvent[];
 }
 
 /**
@@ -213,11 +258,14 @@ export interface TrackedWhaleWallet {
   avatarSeed?: string;
   firstActiveToday: number;
   lastActiveToday: number;
-  totalBuysCountToday: number; // Count of >= 1 SOL transactions executed today
+  totalBuysCountToday: number; // Count of >= 1 SOL buy transactions executed today
+  totalSellsCountToday: number; // Count of sell transactions executed today
   uniqueCoinsBoughtCountToday: number; // Number of distinct coins bought today
-  totalSolSpentToday: number; // Cumulative SOL deployed across >= 1 SOL buys today
-  holdingsToday: TrackedWalletHolding[]; // Detailed breakdown of coins bought/holding today
-  transactionsToday: WhaleBuyTransaction[];
+  totalSolSpentToday: number; // Cumulative SOL deployed across buys today
+  totalSolSoldToday: number; // Cumulative SOL received from sales today
+  netRealizedPnlSol: number; // Total realized PnL today
+  holdingsToday: TrackedWalletHolding[]; // Detailed breakdown of coins bought and sold today
+  transactionsToday: WhaleTransaction[];
   isStarred?: boolean;
   tier: 'Mega Whale (10+ SOL)' | 'High Roller (5+ SOL)' | 'Active Whale (1+ SOL)';
 }
