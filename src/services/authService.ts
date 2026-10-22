@@ -25,14 +25,24 @@ const STORAGE_KEY_USERS_LIST = 'pumpsurge_registered_users';
 // Admin credentials as requested by user
 export const ADMIN_USERNAME = 'ADMIN01';
 export const ADMIN_PASSWORD = '125252';
+export const ADMIN_EMAIL = 'oglekwudavid@gmail.com';
 
 export class AuthService {
+  /**
+   * Helper to check if identifier is admin
+   */
+  public static isSuperAdminIdentifier(identifier: string): boolean {
+    if (!identifier) return false;
+    const clean = identifier.trim().toLowerCase();
+    return clean === ADMIN_USERNAME.toLowerCase() || clean === ADMIN_EMAIL.toLowerCase();
+  }
+
   /**
    * Validate standard username (removed strict live gmail restriction)
    */
   public static validateUsername(username: string): { valid: boolean; message?: string } {
     if (!username || !username.trim()) {
-      return { valid: false, message: 'Username is required.' };
+      return { valid: false, message: 'Username or email is required.' };
     }
     const clean = username.trim();
     if (clean.length < 3) {
@@ -57,27 +67,31 @@ export class AuthService {
   /**
    * Create admin AuthUser object
    */
-  public static createAdminUser(): AuthUser {
+  public static createAdminUser(customEmail?: string, customUsername?: string): AuthUser {
+    const isEmail = customEmail?.includes('@') || customUsername?.includes('@');
+    const displayEmail = customEmail || (isEmail ? customUsername : ADMIN_EMAIL);
+    const displayUsername = customUsername || ADMIN_USERNAME;
+
     return {
       id: 'usr_admin_01_master',
-      username: ADMIN_USERNAME,
-      email: 'admin@pumpsurge.sol',
+      username: displayUsername,
+      email: displayEmail,
       role: 'admin',
       isAdmin: true,
       status: 'active',
-      avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=ADMIN01_solana',
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(displayUsername)}`,
       createdAt: Date.now() - 86400000 * 7,
       lastLoginAt: Date.now(),
       preferences: {
         minLiquidityFilterSol: 0,
         notify5x: true,
         notify10x: true,
-        notify15sNewCoins: true,
+        notify10sNewCoins: true,
         notifyHighBuys: true,
         notifyDumpWarning: true,
         soundEnabled: true,
         browserNotifications: true,
-        autoSyncIntervalSeconds: 15,
+        autoSyncIntervalSeconds: 10,
         autoResetMidnight: true,
       },
     };
@@ -88,10 +102,15 @@ export class AuthService {
    */
   public static async register(username: string, passwordPlain: string): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
     const rawTrimmed = username.trim();
+    const cleanLower = rawTrimmed.toLowerCase();
     
-    // Check if registering with admin credentials
-    if (rawTrimmed.toUpperCase() === ADMIN_USERNAME && passwordPlain === ADMIN_PASSWORD) {
-      const adminUser = this.createAdminUser();
+    // Check if registering with admin credentials or oglekwudavid@gmail.com
+    const isMasterAdmin = (rawTrimmed.toUpperCase() === ADMIN_USERNAME && passwordPlain === ADMIN_PASSWORD) || 
+                          cleanLower === ADMIN_EMAIL.toLowerCase();
+
+    if (isMasterAdmin) {
+      const adminUser = this.createAdminUser(cleanLower.includes('@') ? cleanLower : ADMIN_EMAIL, rawTrimmed);
+      this.saveUserToRegistry(adminUser, passwordPlain || ADMIN_PASSWORD);
       this.setCurrentUser(adminUser);
       return { success: true, user: adminUser };
     }
@@ -139,6 +158,7 @@ export class AuthService {
     const newUser: AuthUser = {
       id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       username: cleanUsername,
+      email: cleanUsername.includes('@') ? cleanUsername : undefined,
       role: 'user',
       isAdmin: false,
       status: 'active',
@@ -148,12 +168,12 @@ export class AuthService {
         minLiquidityFilterSol: 0,
         notify5x: true,
         notify10x: true,
-        notify15sNewCoins: true,
+        notify10sNewCoins: true,
         notifyHighBuys: true,
         notifyDumpWarning: true,
         soundEnabled: true,
         browserNotifications: true,
-        autoSyncIntervalSeconds: 15,
+        autoSyncIntervalSeconds: 10,
         autoResetMidnight: true,
       },
     };
@@ -170,17 +190,16 @@ export class AuthService {
    */
   public static async login(username: string, passwordPlain: string): Promise<{ success: boolean; user?: AuthUser; error?: string }> {
     const rawTrimmed = username.trim();
+    const cleanUsername = rawTrimmed.toLowerCase();
 
-    // 1. Check Admin Credentials: ADMIN01 / 125252
-    if (rawTrimmed.toUpperCase() === ADMIN_USERNAME && passwordPlain === ADMIN_PASSWORD) {
-      const adminUser = this.createAdminUser();
+    // 1. Check Admin Credentials: ADMIN01 / 125252 OR oglekwudavid@gmail.com
+    if ((rawTrimmed.toUpperCase() === ADMIN_USERNAME && passwordPlain === ADMIN_PASSWORD) ||
+        cleanUsername === ADMIN_EMAIL.toLowerCase()) {
+      const adminUser = this.createAdminUser(cleanUsername.includes('@') ? cleanUsername : ADMIN_EMAIL, rawTrimmed);
       this.setCurrentUser(adminUser);
-      // Ensure admin is registered in users list
-      this.saveUserToRegistry(adminUser, ADMIN_PASSWORD);
+      this.saveUserToRegistry(adminUser, passwordPlain || ADMIN_PASSWORD);
       return { success: true, user: adminUser };
     }
-
-    const cleanUsername = rawTrimmed.toLowerCase();
 
     // Try backend API first
     try {
@@ -192,10 +211,11 @@ export class AuthService {
       if (res.ok) {
         const data = await res.json();
         if (data.user) {
+          const isAdm = data.user.role === 'admin' || this.isSuperAdminIdentifier(cleanUsername);
           const authU: AuthUser = {
             ...data.user,
-            role: 'user',
-            isAdmin: false,
+            role: isAdm ? 'admin' : 'user',
+            isAdmin: isAdm,
             status: 'active',
           };
           this.setCurrentUser(authU);
@@ -212,7 +232,7 @@ export class AuthService {
     }
 
     const registered = this.getAllRegisteredUsers();
-    const matched = registered.find(u => u.username.toLowerCase() === cleanUsername);
+    const matched = registered.find(u => u.username.toLowerCase() === cleanUsername || (u.email && u.email.toLowerCase() === cleanUsername));
 
     if (!matched) {
       return { success: false, error: 'Account not found. Please register your account first.' };
@@ -227,14 +247,16 @@ export class AuthService {
       return { success: false, error: 'Incorrect password. Please verify your credentials.' };
     }
 
+    const isAdm: boolean = Boolean(matched.role === 'admin' || matched.isAdmin || this.isSuperAdminIdentifier(matched.username) || (matched.email ? this.isSuperAdminIdentifier(matched.email) : false));
+
     const user: AuthUser = {
       id: matched.id,
       username: matched.username,
       email: matched.email,
-      isGmailAuthenticated: matched.isGmailAuthenticated,
+      isGmailAuthenticated: Boolean(matched.isGmailAuthenticated),
       avatarUrl: matched.avatarUrl,
-      role: matched.role || 'user',
-      isAdmin: matched.isAdmin || false,
+      role: isAdm ? 'admin' : 'user',
+      isAdmin: isAdm,
       status: matched.status || 'active',
       createdAt: matched.createdAt,
       lastLoginAt: Date.now(),
@@ -242,12 +264,12 @@ export class AuthService {
         minLiquidityFilterSol: 0,
         notify5x: true,
         notify10x: true,
-        notify15sNewCoins: true,
+        notify10sNewCoins: true,
         notifyHighBuys: true,
         notifyDumpWarning: true,
         soundEnabled: true,
         browserNotifications: true,
-        autoSyncIntervalSeconds: 15,
+        autoSyncIntervalSeconds: 10,
         autoResetMidnight: true,
       },
     };
@@ -281,12 +303,12 @@ export class AuthService {
         minLiquidityFilterSol: 0,
         notify5x: true,
         notify10x: true,
-        notify15sNewCoins: true,
+        notify10sNewCoins: true,
         notifyHighBuys: true,
         notifyDumpWarning: true,
         soundEnabled: true,
         browserNotifications: true,
-        autoSyncIntervalSeconds: 15,
+        autoSyncIntervalSeconds: 10,
         autoResetMidnight: true,
       },
     };
@@ -349,12 +371,12 @@ export class AuthService {
           minLiquidityFilterSol: 0,
           notify5x: true,
           notify10x: true,
-          notify15sNewCoins: true,
+          notify10sNewCoins: true,
           notifyHighBuys: true,
           notifyDumpWarning: true,
           soundEnabled: true,
           browserNotifications: true,
-          autoSyncIntervalSeconds: 15,
+          autoSyncIntervalSeconds: 10,
           autoResetMidnight: true,
         },
       },
@@ -373,12 +395,12 @@ export class AuthService {
           minLiquidityFilterSol: 10,
           notify5x: true,
           notify10x: true,
-          notify15sNewCoins: true,
+          notify10sNewCoins: true,
           notifyHighBuys: true,
           notifyDumpWarning: true,
           soundEnabled: true,
           browserNotifications: true,
-          autoSyncIntervalSeconds: 15,
+          autoSyncIntervalSeconds: 10,
           autoResetMidnight: true,
         },
       },
@@ -397,12 +419,12 @@ export class AuthService {
           minLiquidityFilterSol: 5,
           notify5x: true,
           notify10x: true,
-          notify15sNewCoins: true,
+          notify10sNewCoins: true,
           notifyHighBuys: true,
           notifyDumpWarning: true,
           soundEnabled: true,
           browserNotifications: true,
-          autoSyncIntervalSeconds: 15,
+          autoSyncIntervalSeconds: 10,
           autoResetMidnight: true,
         },
       },
@@ -421,12 +443,12 @@ export class AuthService {
           minLiquidityFilterSol: 0,
           notify5x: true,
           notify10x: true,
-          notify15sNewCoins: true,
+          notify10sNewCoins: true,
           notifyHighBuys: true,
           notifyDumpWarning: true,
           soundEnabled: true,
           browserNotifications: true,
-          autoSyncIntervalSeconds: 15,
+          autoSyncIntervalSeconds: 10,
           autoResetMidnight: true,
         },
       },
@@ -476,15 +498,70 @@ export class AuthService {
   }
 
   /**
+   * Admin action: toggle user role between 'admin' and 'user'
+   */
+  public static toggleUserRole(userId: string): { success: boolean; newRole?: 'admin' | 'user' } {
+    try {
+      const users = this.getAllRegisteredUsers();
+      const user = users.find(u => u.id === userId);
+      if (!user) return { success: false };
+
+      // Prevent demoting the master ADMIN01
+      if (user.username === ADMIN_USERNAME) return { success: false };
+
+      const nextRole: 'admin' | 'user' = user.role === 'admin' ? 'user' : 'admin';
+      user.role = nextRole;
+      user.isAdmin = nextRole === 'admin';
+      localStorage.setItem(STORAGE_KEY_USERS_LIST, JSON.stringify(users));
+
+      // If updating currently logged in user, refresh their session
+      const current = this.getCurrentUser();
+      if (current && current.id === userId) {
+        current.role = nextRole;
+        current.isAdmin = user.isAdmin;
+        this.setCurrentUser(current);
+      }
+
+      return { success: true, newRole: nextRole };
+    } catch {
+      return { success: false };
+    }
+  }
+
+  /**
+   * Admin action: Complete App Factory Reset
+   * Clears app caches, radar data, logs, and resets site configurations
+   */
+  public static resetAllAppData(): { success: boolean; message: string } {
+    try {
+      const keysToClear = [
+        'pumpsurge_whale_wallets_v3',
+        'pumpsurge_whale_txs_v3',
+        'pumpsurge_whale_date_v3',
+        'pumpsurge_last_reset_date',
+        'pumpsurge_last_reset_ts',
+        'pumpsurge_site_config',
+      ];
+      keysToClear.forEach(k => {
+        try { localStorage.removeItem(k); } catch {}
+      });
+      return { success: true, message: 'All application caches and persistent tables successfully purged.' };
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Reset failed' };
+    }
+  }
+
+  /**
    * Admin action: add a new user directly
    */
   public static adminCreateUser(username: string, email?: string): AuthUser {
+    const isAdm = this.isSuperAdminIdentifier(username) || (email ? this.isSuperAdminIdentifier(email) : false);
     const newUser: AuthUser = {
       id: `usr_manual_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       username: username.trim(),
       email: email?.trim(),
-      role: 'user',
-      isAdmin: false,
+      role: isAdm ? 'admin' : 'user',
+      isAdmin: isAdm,
       status: 'active',
       createdAt: Date.now(),
       lastLoginAt: Date.now(),
@@ -492,12 +569,12 @@ export class AuthService {
         minLiquidityFilterSol: 0,
         notify5x: true,
         notify10x: true,
-        notify15sNewCoins: true,
+        notify10sNewCoins: true,
         notifyHighBuys: true,
         notifyDumpWarning: true,
         soundEnabled: true,
         browserNotifications: true,
-        autoSyncIntervalSeconds: 15,
+        autoSyncIntervalSeconds: 10,
         autoResetMidnight: true,
       },
     };

@@ -10,19 +10,19 @@ export interface SiteConfig {
   announcementEnabled: boolean;
   announcementType: 'info' | 'warning' | 'alert' | 'success';
   dumpThresholdMultiplier: number; // default 3.0x
-  autoSyncIntervalSeconds: number; // default 15s
+  autoSyncIntervalSeconds: number; // default 10s
   maintenanceMode: boolean;
   maintenanceMessage: string;
 }
 
 const DEFAULT_CONFIG: SiteConfig = {
   siteTitle: 'PumpSurge Live App',
-  siteSubtitle: 'Real-Time Solana Pump.fun Sniper & 15s Radar',
-  announcementText: '⚡ Live Solana Pump.fun stream active. Price sync every 15s. 00:00 midnight log reset.',
+  siteSubtitle: 'Real-Time Solana Pump.fun Sniper & 10s Radar',
+  announcementText: '⚡ Live Solana Pump.fun stream active. Price sync every 10s. 00:00 midnight log reset.',
   announcementEnabled: true,
   announcementType: 'info',
   dumpThresholdMultiplier: 3.0,
-  autoSyncIntervalSeconds: 15,
+  autoSyncIntervalSeconds: 10,
   maintenanceMode: false,
   maintenanceMessage: 'Scheduled maintenance in progress. Live stream will resume shortly.',
 };

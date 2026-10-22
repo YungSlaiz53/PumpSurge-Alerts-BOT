@@ -68,11 +68,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSound,
   isAutoSyncActive = true,
   onToggleAutoSync = () => {},
-  syncCountdownSeconds = 15,
+  syncCountdownSeconds = 10,
   siteTitle = 'PumpSurge',
-  siteSubtitle = 'Real-Time Solana Pump.fun Sniper & 15s Radar',
+  siteSubtitle = 'Real-Time Solana Pump.fun Sniper & 10s Radar',
 }) => {
-  const isAdmin = currentUser?.isAdmin || currentUser?.role === 'admin' || currentUser?.username === 'ADMIN01';
+  const isAdmin = currentUser?.isAdmin || 
+                  currentUser?.role === 'admin' || 
+                  currentUser?.username === 'ADMIN01' || 
+                  currentUser?.email?.toLowerCase() === 'oglekwudavid@gmail.com';
 
   return (
     <header className="border-b border-cyan-500/20 bg-black/95 backdrop-blur sticky top-0 z-40">
@@ -100,7 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* 15s Auto-Sync Heartbeat Status */}
+          {/* 10s Auto-Sync Heartbeat Status */}
           <button
             onClick={onToggleAutoSync}
             className={`px-2 py-0.5 rounded text-[11px] font-mono border flex items-center gap-1.5 transition ${
@@ -108,10 +111,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ? 'bg-cyan-950/60 border-cyan-400/40 text-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.2)]'
                 : 'bg-zinc-950 border-white/10 text-zinc-500'
             }`}
-            title="Toggle 15s auto-synchronization"
+            title="Toggle 10s auto-synchronization"
           >
             <RefreshCw className={`w-3 h-3 ${isAutoSyncActive ? 'animate-spin text-cyan-400' : ''}`} />
-            <span>15s Sync: {isAutoSyncActive ? `${syncCountdownSeconds}s` : 'OFF'}</span>
+            <span>10s Sync: {isAutoSyncActive ? `${syncCountdownSeconds}s` : 'OFF'}</span>
           </button>
 
           <div className="hidden md:flex items-center gap-3 font-mono text-[11px]">

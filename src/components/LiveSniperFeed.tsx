@@ -98,13 +98,13 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
             <button
               onClick={onToggleAutoSync}
               className="px-3 py-1.5 rounded-xl bg-cyan-950/60 border border-cyan-400/40 text-cyan-300 flex items-center gap-2 hover:bg-cyan-900/60 transition active:scale-95 shadow-[0_0_10px_rgba(0,240,255,0.2)]"
-              title="Toggle 15-second auto-sync"
+              title="Toggle 10-second auto-sync"
             >
               <span className="relative flex h-2 w-2">
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isAutoSyncActive ? 'bg-cyan-400 opacity-75' : 'bg-zinc-600'}`}></span>
                 <span className={`relative inline-flex rounded-full h-2 w-2 ${isAutoSyncActive ? 'bg-cyan-400' : 'bg-zinc-600'}`}></span>
               </span>
-              <span>15s Auto-Sync: <strong>{isAutoSyncActive ? 'ON' : 'PAUSED'}</strong></span>
+              <span>10s Auto-Sync: <strong>{isAutoSyncActive ? 'ON' : 'PAUSED'}</strong></span>
               {isAutoSyncActive && (
                 <span className="bg-cyan-400 text-black font-bold px-1.5 py-0.5 rounded text-[10px]">
                   {syncCountdownSeconds}s
@@ -371,9 +371,9 @@ export const LiveSniperFeed: React.FC<LiveSniperFeedProps> = ({
                     <div className="bg-zinc-950/50 border border-zinc-800/80 rounded-xl p-2.5">
                       <div className="text-[10px] text-zinc-500 uppercase font-medium flex items-center justify-between">
                         <span>Market Cap</span>
-                        {token.priceChange15s !== undefined && token.priceChange15s !== 0 && (
-                          <span className={`text-[10px] font-bold ${token.priceChange15s > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {token.priceChange15s > 0 ? '+' : ''}{token.priceChange15s.toFixed(1)}% (15s)
+                        {(token.priceChange10s !== undefined || token.priceChange15s !== undefined) && (
+                          <span className={`text-[10px] font-bold ${(token.priceChange10s || token.priceChange15s || 0) > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {(token.priceChange10s || token.priceChange15s || 0) > 0 ? '+' : ''}{(token.priceChange10s ?? token.priceChange15s ?? 0).toFixed(1)}% (10s)
                           </span>
                         )}
                       </div>

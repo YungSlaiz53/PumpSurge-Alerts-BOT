@@ -13,11 +13,12 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { BondingCurveCalculator } from './components/BondingCurveCalculator';
 import { WhaleTrackingDashboard } from './components/WhaleTrackingDashboard';
 import { AuthModal } from './components/AuthModal';
+import { AuthGateView } from './components/AuthGateView';
 import { NotificationCenter, AppNotification } from './components/NotificationCenter';
 import { TrackedToken, LogEntry, TrackedWhaleWallet, WhaleTransaction, WhaleBuyTransaction } from './types';
 import { PumpSyncService } from './services/pumpSyncService';
 import { WhaleTrackingService } from './services/whaleTrackingService';
-import { AuthService, AuthUser, ADMIN_USERNAME } from './services/authService';
+import { AuthService, AuthUser, ADMIN_USERNAME, ADMIN_EMAIL } from './services/authService';
 import { SiteConfigService, SiteConfig } from './services/siteConfigService';
 import { AlertTriangle, Bell, Info, ShieldAlert, CheckCircle2, Trophy } from 'lucide-react';
 
@@ -35,15 +36,15 @@ export default function App() {
   // Site Customizer State (Admin controlled)
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(() => SiteConfigService.getConfig());
 
-  // 15-Second Auto-Synchronize State
+  // 10-Second Auto-Synchronize State (Requirement 2: reduced to 10secs)
   const [isAutoSyncActive, setIsAutoSyncActive] = useState(true);
-  const [syncCountdown, setSyncCountdown] = useState(15);
+  const [syncCountdown, setSyncCountdown] = useState(10);
   const [timeUntilMidnight, setTimeUntilMidnight] = useState('');
 
   // User Authentication State
-  // Requirement 5: "Now make the first thing you see when you open the site is to register/login"
+  // Requirement 1: once you enter the link to this site, login or register page shows
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => AuthService.getCurrentUser());
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => !AuthService.getCurrentUser());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
   // In-App Notification Center State
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -101,7 +102,7 @@ export default function App() {
       timestamp: Date.now() - 1000,
       level: 'success',
       tag: 'SOLANA',
-      message: 'Solana RPC cluster connected: Commitment [processed]. 15s price synchronizer active.',
+      message: 'Solana RPC cluster connected: Commitment [processed]. 10s price synchronizer active.',
     },
     {
       id: 'init-3',
@@ -360,7 +361,7 @@ export default function App() {
     setWhaleTransactions(WhaleTrackingService.getTransactions());
   }, [handleSyncRealTime, solUsdPrice]);
 
-  // 15-Second Heartbeat Synchronization Loop
+  // 10-Second Heartbeat Synchronization Loop (Requirement 2)
   useEffect(() => {
     if (!isAutoSyncActive) return;
 
@@ -368,7 +369,7 @@ export default function App() {
       setSyncCountdown((prev) => {
         if (prev <= 1) {
           handleSyncRealTime();
-          return siteConfig.autoSyncIntervalSeconds || 15;
+          return siteConfig.autoSyncIntervalSeconds || 10;
         }
         return prev - 1;
       });
@@ -409,7 +410,7 @@ export default function App() {
       timestamp: Date.now(),
       level: 'info',
       tag: '00:00 RESET',
-      message: '⏰ Manual 00:00 Reset executed: All historical logs cleared, 15s price synchronizer reset.',
+      message: '⏰ Manual 00:00 Reset executed: All historical logs cleared, 10s price synchronizer reset.',
     };
     setLogs([resetNotice]);
   };
@@ -418,6 +419,83 @@ export default function App() {
     const result = PumpSyncService.clearLogsAndCache();
     setLogs(result.logs);
   };
+
+  // Requirement 3: Admin Reset Suite Handlers
+  const handleFactoryResetApp = useCallback(() => {
+    AuthService.resetAllAppData();
+    WhaleTrackingService.clearDailyData();
+    const result = PumpSyncService.clearLogsAndCache();
+    setLogs(result.logs);
+    setNotifications([]);
+    setTokens([]);
+    setWhaleWallets([]);
+    setWhaleTransactions([]);
+    setSyncCountdown(10);
+    handleSyncRealTime(true);
+  }, [handleSyncRealTime]);
+
+  const handleResetWhaleRadar = useCallback(() => {
+    WhaleTrackingService.clearDailyData();
+    WhaleTrackingService.init(tokens, solUsdPrice);
+    setWhaleWallets(WhaleTrackingService.getTrackedWallets());
+    setWhaleTransactions(WhaleTrackingService.getTransactions());
+    setLogs((prev) => [
+      PumpSyncService.createLog(
+        'warn',
+        'WHALE RADAR',
+        '🐋 Whale Radar purged by administrator. Fresh 1+ SOL tracking session initialized.'
+      ),
+      ...prev,
+    ]);
+  }, [tokens, solUsdPrice]);
+
+  const handleResetTokenCache = useCallback(() => {
+    const result = PumpSyncService.clearLogsAndCache();
+    setTokens([]);
+    setLogs(result.logs);
+    handleSyncRealTime(true);
+  }, [handleSyncRealTime]);
+
+  const handleSimulateCustomWhaleBuy = useCallback((solAmount = 3.5, tokenMint?: string) => {
+    const simTx = WhaleTrackingService.simulateRandomWhaleBuy(tokens, solUsdPrice, solAmount, tokenMint);
+    if (simTx) {
+      setWhaleWallets(WhaleTrackingService.getTrackedWallets());
+      setWhaleTransactions(WhaleTrackingService.getTransactions());
+      setLogs((prev) => [
+        PumpSyncService.createLog(
+          'alert',
+          'WHALE MEGA-BUY',
+          `🐋 ADMIN INJECTION: ${simTx.walletLabel || simTx.walletAddress.slice(0, 6)} bought ${simTx.solAmount} SOL of $${simTx.tokenSymbol} ($${Math.round(simTx.solUsdValue).toLocaleString()})`
+        ),
+        ...prev,
+      ]);
+    }
+  }, [tokens, solUsdPrice]);
+
+  const handleSimulateCustomWhaleSell = useCallback((tokenMint?: string) => {
+    const sellTx = WhaleTrackingService.simulateRandomWhaleSell(tokens, solUsdPrice, tokenMint);
+    if (sellTx) {
+      setWhaleWallets(WhaleTrackingService.getTrackedWallets());
+      setWhaleTransactions(WhaleTrackingService.getTransactions());
+      const pnlText = (sellTx.realizedProfitSol || 0) >= 0 
+        ? `+${sellTx.realizedProfitSol} SOL (+${sellTx.realizedPnlPercent}%)`
+        : `${sellTx.realizedProfitSol} SOL (${sellTx.realizedPnlPercent}%)`;
+      setLogs((prev) => [
+        PumpSyncService.createLog(
+          'warn',
+          'WHALE SELL EVENT',
+          `🔴 ADMIN INJECTION: ${sellTx.walletLabel || sellTx.walletAddress.slice(0, 6)} sold ${sellTx.solAmount} SOL of $${sellTx.tokenSymbol} (${pnlText})! Status: ${sellTx.holdingStatus}`
+        ),
+        ...prev,
+      ]);
+    }
+  }, [tokens, solUsdPrice]);
+
+  const handleSimulateMoonshot = useCallback((multiplier: number) => {
+    if (tokens.length === 0) return;
+    const target = tokens[0];
+    handleSimulateTrade(target.mint, multiplier);
+  }, [tokens]);
 
   // Handler to trigger simulated coin dumping (< 3X) (Requirement 10)
   const handleTriggerSimulatedDump = (targetMint?: string) => {
@@ -793,8 +871,8 @@ export default function App() {
 
   const handleAuthSuccess = (user: AuthUser) => {
     setCurrentUser(user);
-    // If admin logged in (ADMIN01 / 125252), open Admin Dashboard directly!
-    if (user.username === ADMIN_USERNAME || user.isAdmin || user.role === 'admin') {
+    // If admin logged in (ADMIN01 / 125252 / oglekwudavid@gmail.com), open Admin Dashboard directly!
+    if (user.username === ADMIN_USERNAME || user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() || user.isAdmin || user.role === 'admin') {
       setActiveTab('admin');
     }
   };
@@ -805,9 +883,16 @@ export default function App() {
     if (activeTab === 'admin') {
       setActiveTab('feed');
     }
-    // Reopen Auth modal immediately per Requirement 5
-    setIsAuthModalOpen(true);
   };
+
+  // Requirement 1: "make it that once you enter the link to this site its the login or register page that will show so its either they login or register."
+  if (!currentUser) {
+    return (
+      <AuthGateView
+        onAuthSuccess={handleAuthSuccess}
+      />
+    );
+  }
 
   const highBuysCount = tokens.filter((t) => t.isHighBuys).length;
   const dumpedCount = tokens.filter((t) => t.isDumped || (t.highestMultiplier >= 3.0 && (t.currentPriceSol / t.initialPriceSol) < 3.0)).length;
@@ -1002,12 +1087,23 @@ export default function App() {
           <BondingCurveCalculator solUsdPrice={solUsdPrice} />
         )}
 
-        {/* 7. ADMIN DASHBOARD VIEW (Requirements 6, 8, 9) */}
+        {/* 7. ADMIN DASHBOARD VIEW (Requirements 6, 8, 9, and Reset Suite) */}
         {activeTab === 'admin' && (
           <AdminDashboard
             onSiteConfigUpdated={(cfg) => setSiteConfig(cfg)}
             onInjectToken={handleInjectCustomToken}
             onTriggerDump={() => handleTriggerSimulatedDump()}
+            onFactoryResetApp={handleFactoryResetApp}
+            onResetWhaleRadar={handleResetWhaleRadar}
+            onResetTokenCache={handleResetTokenCache}
+            onClearLogs={handleClearLogsAndCache}
+            onForceMidnightReset={handleManualMidnightReset}
+            onSimulateWhaleBuy={handleSimulateCustomWhaleBuy}
+            onSimulateWhaleSell={handleSimulateCustomWhaleSell}
+            onSimulateMoonshot={handleSimulateMoonshot}
+            tokens={tokens}
+            whaleWalletsCount={whaleWallets.length}
+            whaleTxCount={whaleTransactions.length}
           />
         )}
       </main>

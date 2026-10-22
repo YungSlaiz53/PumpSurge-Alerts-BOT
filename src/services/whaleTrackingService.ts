@@ -572,10 +572,18 @@ export class WhaleTrackingService {
   /**
    * Generates a realistic live whale buy with >= 1.0 SOL from active tokens
    */
-  public static simulateRandomWhaleBuy(tokens: TrackedToken[], solUsdPrice: number = 150): WhaleTransaction | null {
+  public static simulateRandomWhaleBuy(
+    tokens: TrackedToken[], 
+    solUsdPrice: number = 150,
+    customSolAmount?: number,
+    targetMint?: string
+  ): WhaleTransaction | null {
     if (tokens.length === 0) return null;
 
-    const token = tokens[Math.floor(Math.random() * tokens.length)];
+    let token = targetMint ? tokens.find(t => t.mint === targetMint) : null;
+    if (!token) {
+      token = tokens[Math.floor(Math.random() * tokens.length)];
+    }
 
     const useKnown = Math.random() > 0.35;
     let walletAddress: string;
@@ -590,14 +598,18 @@ export class WhaleTrackingService {
       walletLabel = `Whale_${Math.floor(Math.random() * 900 + 100)}`;
     }
 
-    const solDistribution = Math.random();
     let solAmount = 1.0;
-    if (solDistribution > 0.85) {
-      solAmount = +(Math.random() * 10 + 10).toFixed(2); // 10.0 - 20.0 SOL Mega Buy
-    } else if (solDistribution > 0.5) {
-      solAmount = +(Math.random() * 4 + 3).toFixed(2); // 3.0 - 7.0 SOL Medium Whale
+    if (customSolAmount && customSolAmount >= 1.0) {
+      solAmount = customSolAmount;
     } else {
-      solAmount = +(Math.random() * 2 + 1).toFixed(2); // 1.0 - 3.0 SOL Standard 1+ SOL
+      const solDistribution = Math.random();
+      if (solDistribution > 0.85) {
+        solAmount = +(Math.random() * 10 + 10).toFixed(2); // 10.0 - 20.0 SOL Mega Buy
+      } else if (solDistribution > 0.5) {
+        solAmount = +(Math.random() * 4 + 3).toFixed(2); // 3.0 - 7.0 SOL Medium Whale
+      } else {
+        solAmount = +(Math.random() * 2 + 1).toFixed(2); // 1.0 - 3.0 SOL Standard 1+ SOL
+      }
     }
 
     const priceSol = token.currentPriceSol || 0.00000028;
@@ -630,20 +642,31 @@ export class WhaleTrackingService {
   /**
    * Simulates a live Whale Sell (when they sell the coin)
    */
-  public static simulateRandomWhaleSell(tokens: TrackedToken[] = [], solUsdPrice: number = 150): WhaleTransaction | null {
+  public static simulateRandomWhaleSell(
+    tokens: TrackedToken[] = [], 
+    solUsdPrice: number = 150,
+    targetMint?: string
+  ): WhaleTransaction | null {
     // Find all wallets that currently have an active holding (not 100% sold)
     const eligibleWallets = Array.from(this.wallets.values()).filter((w) =>
-      w.holdingsToday.some((h) => h.remainingTokens > 0)
+      w.holdingsToday.some((h) => h.remainingTokens > 0 && (!targetMint || h.mint === targetMint))
     );
 
-    if (eligibleWallets.length === 0) return null;
+    if (eligibleWallets.length === 0) {
+      // If no holding exists for targetMint, find any eligible wallet
+      const anyEligible = Array.from(this.wallets.values()).filter((w) =>
+        w.holdingsToday.some((h) => h.remainingTokens > 0)
+      );
+      if (anyEligible.length === 0) return null;
+      eligibleWallets.push(...anyEligible);
+    }
 
     // Pick a random wallet
     const wallet = eligibleWallets[Math.floor(Math.random() * eligibleWallets.length)];
-    const activeHoldings = wallet.holdingsToday.filter((h) => h.remainingTokens > 0);
-    if (activeHoldings.length === 0) return null;
-
-    const holding = activeHoldings[Math.floor(Math.random() * activeHoldings.length)];
+    const activeHoldings = wallet.holdingsToday.filter((h) => h.remainingTokens > 0 && (!targetMint || h.mint === targetMint));
+    const fallbackHoldings = wallet.holdingsToday.filter((h) => h.remainingTokens > 0);
+    const holding = (activeHoldings.length > 0 ? activeHoldings : fallbackHoldings)[0];
+    if (!holding) return null;
 
     // Check if token exists in live list for real price
     const liveToken = tokens.find((t) => t.mint === holding.mint);

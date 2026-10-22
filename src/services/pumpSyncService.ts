@@ -168,7 +168,7 @@ export class PumpSyncService {
 
     try {
       collectedLogs.push(
-        this.createLog('info', '15S SYNC', 'Synchronizing real-time Pump.fun token prices and new listings...')
+        this.createLog('info', '10S SYNC', 'Synchronizing real-time Pump.fun token prices and new listings...')
       );
 
       // 2. Fetch latest verified token profiles
@@ -210,7 +210,7 @@ export class PumpSyncService {
         this.createLog(
           'success',
           'PUMP.FUN',
-          `Parsed ${pairs.length} on-chain trading pools on Solana. Updating 15s prices...`
+          `Parsed ${pairs.length} on-chain trading pools on Solana. Updating 10s prices...`
         )
       );
 
@@ -241,17 +241,17 @@ export class PumpSyncService {
         const is5x = multiplier >= 5.0;
         const is10x = multiplier >= 10.0;
 
-        // Find existing token in cache to track previous price and calculate 15s delta
+        // Find existing token in cache to track previous price and calculate 10s delta
         const prevToken = this.cachedTokens.find((t) => t.mint === mint);
         const prevPrice = prevToken ? prevToken.currentPriceSol : priceSol;
-        const priceChange15s = prevToken && prevPrice > 0 
+        const priceChange10s = prevToken && prevPrice > 0 
           ? ((priceSol - prevPrice) / prevPrice) * 100 
           : 0;
 
         // High Buys Detection: High buy count ratio (e.g. > 65% buys), rapid volume, or price surge
         const buyRatio = totalTxns > 0 ? buys / totalTxns : 0.5;
         const buyVelocity = Math.round(buyRatio * 100);
-        const isHighBuys = (buyRatio >= 0.65 && buys >= 8) || priceChange15s > 8.0 || volumeSol > 6.0;
+        const isHighBuys = (buyRatio >= 0.65 && buys >= 8) || priceChange10s > 8.0 || volumeSol > 6.0;
 
         const isBrandNewListing = !this.knownMintSet.has(mint);
         this.knownMintSet.add(mint);
@@ -282,7 +282,8 @@ export class PumpSyncService {
           lastTradeTimestamp: Date.now(),
           isHighBuys,
           buyVelocity,
-          priceChange15s,
+          priceChange10s,
+          priceChange15s: priceChange10s,
           prevPriceSol: prevPrice,
         };
 
@@ -295,7 +296,7 @@ export class PumpSyncService {
             this.createLog(
               'info',
               'NEW LISTING',
-              `✨ Newly Listed (15s): ${name} ($${symbol}) | CA: ${mint.slice(0, 8)}... | Initial MC: $${Math.round(mcapUsd).toLocaleString()}`
+              `✨ Newly Listed (10s): ${name} ($${symbol}) | CA: ${mint.slice(0, 8)}... | Initial MC: $${Math.round(mcapUsd).toLocaleString()}`
             )
           );
         }
